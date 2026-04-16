@@ -1,18 +1,24 @@
 # corva-settings
 
-`corva-settings` is a reusable settings library for Corva applications. It resolves configuration by scope, persists documents into a Corva dataset, and keeps a full-snapshot history for same-scope writes.
+`corva-settings` is a reusable settings library for Corva applications. It resolves configuration by scope, persists versioned documents into a Corva dataset, and keeps same-scope history snapshots for later inspection.
 
 ## Resolution order
 
 Reads resolve in this order:
 
 1. Package defaults passed into the service as a Python dict
-2. Remote defaults stored in the dataset with `company_id` and `asset_id` both set to `null`
-3. Company settings
-4. Ancestor asset settings from highest parent to lowest parent
-5. Requested asset settings
+2. Company settings
+3. Ancestor asset settings from highest parent to lowest parent
+4. Requested asset settings
 
 For asset reads, the service resolves the asset's `company_id` and ancestor asset chain through the injected API client by following `parent_asset_id`.
+
+Persisted scopes are limited to:
+
+- company scope: `company_id=<id>, asset_id=None`
+- asset scope: `company_id=<id>, asset_id=<id>`
+
+Unscoped dataset queries are invalid. Package defaults are the only global layer.
 
 ## Stored payload shape
 
@@ -22,12 +28,14 @@ For asset reads, the service resolves the asset's `company_id` and ancestor asse
   "app_key": "corva.dysfunction_detection",
   "asset_id": 1,
   "company_id": 3,
+  "version": 1,
   "data": {
     "settings": {
       "feature_enabled": true
     },
     "updated_by": "user@corva.ai",
     "updated_at": 1710000000,
+    "deleted": false,
     "history": [
       {
         "settings": {
@@ -44,7 +52,9 @@ For asset reads, the service resolves the asset's `company_id` and ancestor asse
 
 `history` is write history for the same stored scope document. Inheritance provenance is not mixed into history.
 
-## First-pass API
+`deleted` marks a logical delete tombstone for a scope. Reads and scope listing ignore a scope whose latest document is marked deleted.
+
+## Public API
 
 ```python
 from corva_settings import SettingsService
@@ -67,20 +77,40 @@ updated = service.patch_settings(
     updated_by="user@corva.ai",
     asset_id=123,
 )
+
+scopes = service.list_scopes("corva.dysfunction_detection", asset_id=123)
+
+cleared = service.clear_settings(
+    "corva.dysfunction_detection",
+    updated_by="user@corva.ai",
+    asset_id=123,
+)
 ```
+
+Supported read and inspection operations:
+
+- `get_settings`
+- `list_scopes`
 
 Supported write operations:
 
 - `replace_settings`
 - `patch_settings`
 - `delete_keys`
+- `clear_settings`
+- `delete_scope`
 
 Writes are scoped to either:
 
 - `company_id`
 - `company_id + asset_id`
 
-`patch_settings` and `delete_keys` use dotted paths such as `alerts.threshold`.
+Operation semantics:
+
+- `patch_settings` and `delete_keys` use dotted paths such as `alerts.threshold`
+- `clear_settings` writes an empty active document for the target scope
+- `delete_scope` writes a logical delete tombstone for the target scope
+- `list_scopes` returns the non-deleted scopes present in the applicable resolution chain
 
 ## Expected API client surface
 
@@ -101,18 +131,18 @@ Asset hierarchy resolution uses raw platform requests through `Api.get(...)` bec
 
 Current resolver behavior:
 
-- `GET /v2/assets/{asset_id}?fields=*` to extract `company_id`
-- Follow `parent_asset_id` recursively to build the ancestor chain used for inheritance
+- `GET /v2/assets/{asset_id}` to extract `company_id`
+- follow `parent_asset_id` recursively to build the ancestor chain used for inheritance
 
 The company endpoint is not currently required for settings resolution because `company_id` is already present on asset payloads.
 
 ## Testing
 
-Run:
+Preferred validation after code changes:
 
-```bash
-uv run pytest
-```
+1. `pytest -q tests/test_service.py`
+2. `python -m compileall src`
+3. `uv run pytest`
 
 Live integration test:
 
