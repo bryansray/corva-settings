@@ -39,6 +39,12 @@ class CorvaDatasetRepository:
         self.dataset = dataset
 
     def fetch_document(self, scope: SettingsScope) -> SettingsDocument | None:
+        document = self.fetch_latest_document(scope)
+        if document is None or document.deleted:
+            return None
+        return document
+
+    def fetch_latest_document(self, scope: SettingsScope) -> SettingsDocument | None:
         results = self.api_client.get_dataset(
             provider=self.provider,
             dataset=self.dataset,

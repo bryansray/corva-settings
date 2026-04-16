@@ -49,7 +49,12 @@ class SettingsService:
         context = self._resolve_context(company_id=company_id, asset_id=asset_id)
         scope = self._scope_for_write(app_key, context, company_id=company_id, asset_id=asset_id)
         current = self.repository.fetch_document(scope)
-        document = self._build_next_document(scope, dict(settings), updated_by=updated_by, previous=current)
+        document = self._build_next_document(
+            scope,
+            dict(settings),
+            updated_by=updated_by,
+            previous=current,
+        )
         self.repository.save_document(document)
         return self._resolve_effective_settings(app_key, context)
 
@@ -67,7 +72,12 @@ class SettingsService:
         current = self.repository.fetch_document(scope)
         current_settings = current.settings if current else {}
         next_settings = apply_patch(current_settings, patch)
-        document = self._build_next_document(scope, next_settings, updated_by=updated_by, previous=current)
+        document = self._build_next_document(
+            scope,
+            next_settings,
+            updated_by=updated_by,
+            previous=current,
+        )
         self.repository.save_document(document)
         return self._resolve_effective_settings(app_key, context)
 
@@ -85,9 +95,71 @@ class SettingsService:
         current = self.repository.fetch_document(scope)
         current_settings = current.settings if current else {}
         next_settings = delete_paths(current_settings, paths)
-        document = self._build_next_document(scope, next_settings, updated_by=updated_by, previous=current)
+        document = self._build_next_document(
+            scope,
+            next_settings,
+            updated_by=updated_by,
+            previous=current,
+        )
         self.repository.save_document(document)
         return self._resolve_effective_settings(app_key, context)
+
+    def clear_settings(
+        self,
+        app_key: str,
+        *,
+        updated_by: str,
+        company_id: int | None = None,
+        asset_id: int | None = None,
+    ) -> dict[str, Any]:
+        context = self._resolve_context(company_id=company_id, asset_id=asset_id)
+        scope = self._scope_for_write(app_key, context, company_id=company_id, asset_id=asset_id)
+        current = self.repository.fetch_document(scope)
+        document = self._build_next_document(
+            scope,
+            {},
+            updated_by=updated_by,
+            previous=current,
+        )
+        self.repository.save_document(document)
+        return self._resolve_effective_settings(app_key, context)
+
+    def delete_scope(
+        self,
+        app_key: str,
+        *,
+        updated_by: str,
+        company_id: int | None = None,
+        asset_id: int | None = None,
+    ) -> dict[str, Any]:
+        context = self._resolve_context(company_id=company_id, asset_id=asset_id)
+        scope = self._scope_for_write(app_key, context, company_id=company_id, asset_id=asset_id)
+        current = self.repository.fetch_document(scope)
+        if current is None:
+            return self._resolve_effective_settings(app_key, context)
+        document = self._build_next_document(
+            scope,
+            {},
+            updated_by=updated_by,
+            previous=current,
+            deleted=True,
+        )
+        self.repository.save_document(document)
+        return self._resolve_effective_settings(app_key, context)
+
+    def list_scopes(
+        self,
+        app_key: str,
+        *,
+        company_id: int | None = None,
+        asset_id: int | None = None,
+    ) -> list[SettingsScope]:
+        context = self._resolve_context(company_id=company_id, asset_id=asset_id)
+        return [
+            scope
+            for scope in self._resolution_chain(app_key, context)
+            if self.repository.fetch_document(scope) is not None
+        ]
 
     def _resolve_effective_settings(self, app_key: str, context: ScopeContext) -> dict[str, Any]:
         merged = deepcopy(self.package_defaults.get(app_key, {}))
@@ -141,6 +213,7 @@ class SettingsService:
         *,
         updated_by: str,
         previous: SettingsDocument | None = None,
+        deleted: bool = False,
     ) -> SettingsDocument:
         updated_at = self.clock()
         history: list[SettingsHistoryEntry] = previous.history if previous else []
@@ -152,4 +225,5 @@ class SettingsService:
             updated_by=updated_by,
             updated_at=updated_at,
             history=history,
+            deleted=deleted,
         )

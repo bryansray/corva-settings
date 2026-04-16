@@ -65,6 +65,10 @@ class SettingsDocument:
         return int(self.data.get("updated_at", 0))
 
     @property
+    def deleted(self) -> bool:
+        return bool(self.data.get("deleted", False))
+
+    @property
     def history(self) -> list[SettingsHistoryEntry]:
         raw_history = self.data.get("history", [])
         return [SettingsHistoryEntry.from_dict(entry) for entry in raw_history]
@@ -88,6 +92,7 @@ class SettingsDocument:
                 "settings": self.settings,
                 "updated_by": self.updated_by,
                 "updated_at": self.updated_at,
+                "deleted": self.deleted,
                 "history": [entry.to_dict() for entry in self.history],
             },
             "timestamp": self.timestamp,
@@ -109,6 +114,7 @@ class SettingsDocument:
                 "settings": dict(data.get("settings", {})),
                 "updated_by": str(data.get("updated_by", "")),
                 "updated_at": int(data.get("updated_at", payload.get("timestamp", 0))),
+                "deleted": bool(data.get("deleted", False)),
                 "history": history,
             },
             timestamp=int(payload["timestamp"]),
@@ -123,6 +129,7 @@ class SettingsDocument:
         updated_by: str,
         updated_at: int,
         history: list[SettingsHistoryEntry] | None = None,
+        deleted: bool = False,
         _id: str | None = None,
     ) -> SettingsDocument:
         return cls(
@@ -135,6 +142,7 @@ class SettingsDocument:
                 "settings": dict(settings),
                 "updated_by": updated_by,
                 "updated_at": updated_at,
+                "deleted": deleted,
                 "history": [entry.to_dict() for entry in (history or [])],
             },
         )

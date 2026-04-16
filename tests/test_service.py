@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from corva_settings import SettingsService
+from corva_settings import SettingsScope, SettingsService
 
 
 class FakeResponse:
@@ -105,6 +105,7 @@ def seed_document(
                 "settings": deepcopy(settings),
                 "updated_by": updated_by,
                 "updated_at": updated_at,
+                "deleted": False,
                 "history": [],
             },
             "timestamp": updated_at,
@@ -123,7 +124,7 @@ def api_client() -> FakeApiClient:
 
 @pytest.fixture
 def service(api_client: FakeApiClient) -> SettingsService:
-    clock_values = iter([100, 200, 300, 400, 500, 600])
+    clock_values = iter([100, 200, 300, 400, 500, 600, 700, 800, 900, 1000])
     return SettingsService(
         api_client,
         dataset="app.settings",
@@ -333,3 +334,122 @@ def test_replace_settings_rejects_unscoped_write(service: SettingsService) -> No
             {"a": "new"},
             updated_by="new@corva.ai",
         )
+
+
+def test_list_scopes_returns_existing_resolution_chain(
+    service: SettingsService, api_client: FakeApiClient
+) -> None:
+    seed_document(
+        api_client,
+        app_key="corva.dysfunction_detection",
+        company_id=3,
+        asset_id=None,
+        settings={"company_only": True},
+        updated_at=10,
+    )
+    seed_document(
+        api_client,
+        app_key="corva.dysfunction_detection",
+        company_id=3,
+        asset_id=10,
+        settings={"rig_only": True},
+        updated_at=20,
+    )
+    seed_document(
+        api_client,
+        app_key="corva.dysfunction_detection",
+        company_id=3,
+        asset_id=1,
+        settings={"asset_only": True},
+        updated_at=30,
+    )
+
+    scopes = service.list_scopes("corva.dysfunction_detection", asset_id=1)
+
+    assert scopes == [
+        SettingsScope("corva.dysfunction_detection", company_id=3, asset_id=None),
+        SettingsScope("corva.dysfunction_detection", company_id=3, asset_id=10),
+        SettingsScope("corva.dysfunction_detection", company_id=3, asset_id=1),
+    ]
+
+
+def test_clear_settings_preserves_scope_and_reverts_to_inherited_values(
+    service: SettingsService, api_client: FakeApiClient
+) -> None:
+    seed_document(
+        api_client,
+        app_key="corva.dysfunction_detection",
+        company_id=3,
+        asset_id=None,
+        settings={"a": "company", "nested": {"value": 10}},
+        updated_at=10,
+    )
+    seed_document(
+        api_client,
+        app_key="corva.dysfunction_detection",
+        company_id=3,
+        asset_id=1,
+        settings={"a": "asset", "nested": {"value": 99}},
+        updated_at=20,
+    )
+
+    settings = service.clear_settings(
+        "corva.dysfunction_detection",
+        updated_by="user@corva.ai",
+        asset_id=1,
+    )
+
+    assert settings["a"] == "company"
+    assert settings["nested"]["value"] == 10
+
+    latest_asset_document = max(
+        (doc for doc in api_client.documents if doc["company_id"] == 3 and doc["asset_id"] == 1),
+        key=lambda item: item["timestamp"],
+    )
+    assert latest_asset_document["data"]["settings"] == {}
+    assert latest_asset_document["data"]["deleted"] is False
+
+    scopes = service.list_scopes("corva.dysfunction_detection", asset_id=1)
+    assert scopes[-1] == SettingsScope("corva.dysfunction_detection", company_id=3, asset_id=1)
+
+
+def test_delete_scope_hides_deleted_scope_without_revealing_prior_version(
+    service: SettingsService, api_client: FakeApiClient
+) -> None:
+    seed_document(
+        api_client,
+        app_key="corva.dysfunction_detection",
+        company_id=3,
+        asset_id=None,
+        settings={"a": "company"},
+        updated_at=10,
+    )
+    seed_document(
+        api_client,
+        app_key="corva.dysfunction_detection",
+        company_id=3,
+        asset_id=1,
+        settings={"a": "asset"},
+        updated_at=20,
+    )
+
+    settings = service.delete_scope(
+        "corva.dysfunction_detection",
+        updated_by="user@corva.ai",
+        asset_id=1,
+    )
+
+    assert settings["a"] == "company"
+
+    latest_asset_document = max(
+        (doc for doc in api_client.documents if doc["company_id"] == 3 and doc["asset_id"] == 1),
+        key=lambda item: item["timestamp"],
+    )
+    assert latest_asset_document["data"]["settings"] == {}
+    assert latest_asset_document["data"]["deleted"] is True
+
+    current_asset_settings = service.get_settings("corva.dysfunction_detection", asset_id=1)
+    assert current_asset_settings["a"] == "company"
+    assert service.list_scopes("corva.dysfunction_detection", asset_id=1) == [
+        SettingsScope("corva.dysfunction_detection", company_id=3, asset_id=None)
+    ]
