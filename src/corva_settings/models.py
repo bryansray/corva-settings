@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 
@@ -8,14 +8,14 @@ from typing import Any
 class SettingsScope:
     app_key: str
     company_id: int | None = None
-    rig_id: int | None = None
     asset_id: int | None = None
 
     def to_query(self) -> dict[str, Any]:
+        if self.company_id is None and self.asset_id is None:
+            raise ValueError("settings queries must target a company or asset scope")
         return {
             "app_key": self.app_key,
             "company_id": self.company_id,
-            "rig_id": self.rig_id,
             "asset_id": self.asset_id,
         }
 
@@ -48,9 +48,9 @@ class SettingsDocument:
     data: dict[str, Any]
     timestamp: int
     company_id: int | None = None
-    rig_id: int | None = None
     asset_id: int | None = None
     _id: str | None = None
+    version: int = 1
 
     @property
     def settings(self) -> dict[str, Any]:
@@ -74,7 +74,6 @@ class SettingsDocument:
         return SettingsScope(
             app_key=self.app_key,
             company_id=self.company_id,
-            rig_id=self.rig_id,
             asset_id=self.asset_id,
         )
 
@@ -83,8 +82,8 @@ class SettingsDocument:
             "_id": self._id or "",
             "app_key": self.app_key,
             "company_id": self.company_id,
-            "rig_id": self.rig_id,
             "asset_id": self.asset_id,
+            "version": self.version,
             "data": {
                 "settings": self.settings,
                 "updated_by": self.updated_by,
@@ -97,12 +96,14 @@ class SettingsDocument:
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> SettingsDocument:
         data = dict(payload.get("data", {}))
-        history = [SettingsHistoryEntry.from_dict(entry).to_dict() for entry in data.get("history", [])]
+        history = [
+            SettingsHistoryEntry.from_dict(entry).to_dict()
+            for entry in data.get("history", [])
+        ]
         return cls(
             _id=payload.get("_id"),
             app_key=str(payload["app_key"]),
             company_id=payload.get("company_id"),
-            rig_id=payload.get("rig_id"),
             asset_id=payload.get("asset_id"),
             data={
                 "settings": dict(data.get("settings", {})),
@@ -128,7 +129,6 @@ class SettingsDocument:
             _id=_id,
             app_key=scope.app_key,
             company_id=scope.company_id,
-            rig_id=scope.rig_id,
             asset_id=scope.asset_id,
             timestamp=updated_at,
             data={
@@ -150,5 +150,10 @@ class SettingsDocument:
 @dataclass(frozen=True, slots=True)
 class ScopeContext:
     company_id: int | None = None
-    rig_id: int | None = None
-    asset_id: int | None = None
+    asset_ids: tuple[int, ...] = ()
+
+    @property
+    def asset_id(self) -> int | None:
+        if not self.asset_ids:
+            return None
+        return self.asset_ids[-1]

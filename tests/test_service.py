@@ -27,7 +27,6 @@ class FakeApiClient:
     def __init__(self) -> None:
         self.documents: list[dict[str, Any]] = []
         self.assets: dict[int, dict[str, Any]] = {}
-        self.rigs: dict[int, dict[str, Any]] = {}
 
     def get_dataset(
         self,
@@ -72,47 +71,13 @@ class FakeApiClient:
                         "attributes": asset,
                         "relationships": {
                             "company": {"data": {"id": str(asset["company_id"]), "type": "company"}},
-                            "rig": (
-                                {"data": {"id": str(asset["rig_id"]), "type": "rig"}}
-                                if asset.get("rig_id") is not None
-                                else {"data": None}
-                            ),
-                        },
-                    },
-                    "included": [],
-                }
-                if asset.get("rig_id") is not None and asset["rig_id"] in self.rigs:
-                    payload["included"].append(
-                        {
-                            "id": str(asset["rig_id"]),
-                            "type": "rig",
-                            "attributes": deepcopy(self.rigs[asset["rig_id"]]),
-                        }
-                    )
-                payload["included"].append(
-                    {
-                        "id": str(asset["company_id"]),
-                        "type": "company",
-                        "attributes": {"id": asset["company_id"]},
-                    }
-                )
-                return FakeResponse(payload)
-        if path.startswith("/v2/rigs/"):
-            rig_id = int(path.split("/v2/rigs/")[1].split("?")[0].strip("/"))
-            if rig_id in self.rigs:
-                rig = deepcopy(self.rigs[rig_id])
-                payload = {
-                    "data": {
-                        "attributes": rig,
-                        "relationships": {
-                            "company": {"data": {"id": str(rig["company_id"]), "type": "company"}},
                         },
                     },
                     "included": [
                         {
-                            "id": str(rig["company_id"]),
+                            "id": str(asset["company_id"]),
                             "type": "company",
-                            "attributes": {"id": rig["company_id"]},
+                            "attributes": {"id": asset["company_id"]},
                         }
                     ],
                 }
@@ -127,7 +92,6 @@ def seed_document(
     settings: dict[str, Any],
     updated_at: int,
     company_id: int | None,
-    rig_id: int | None,
     asset_id: int | None,
     updated_by: str = "seed@corva.ai",
 ) -> None:
@@ -136,7 +100,6 @@ def seed_document(
             "_id": f"seed-{len(api_client.documents) + 1}",
             "app_key": app_key,
             "company_id": company_id,
-            "rig_id": rig_id,
             "asset_id": asset_id,
             "data": {
                 "settings": deepcopy(settings),
@@ -152,8 +115,9 @@ def seed_document(
 @pytest.fixture
 def api_client() -> FakeApiClient:
     client = FakeApiClient()
-    client.rigs[10] = {"id": 10, "company_id": 3}
-    client.assets[1] = {"id": 1, "company_id": 3, "rig_id": 10, "parent_asset_id": 99}
+    client.assets[100] = {"id": 100, "company_id": 3, "parent_asset_id": None, "type": "Asset::Program"}
+    client.assets[10] = {"id": 10, "company_id": 3, "parent_asset_id": 100, "type": "Asset::Rig"}
+    client.assets[1] = {"id": 1, "company_id": 3, "parent_asset_id": 10, "type": "Asset::Well"}
     return client
 
 
@@ -173,23 +137,13 @@ def service(api_client: FakeApiClient) -> SettingsService:
     )
 
 
-def test_get_settings_merges_package_remote_company_rig_asset(
+def test_get_settings_merges_package_company_and_asset_ancestry(
     service: SettingsService, api_client: FakeApiClient
 ) -> None:
     seed_document(
         api_client,
         app_key="corva.dysfunction_detection",
-        company_id=None,
-        rig_id=None,
-        asset_id=None,
-        settings={"a": "remote", "nested": {"shared": "remote", "remote_only": True}},
-        updated_at=10,
-    )
-    seed_document(
-        api_client,
-        app_key="corva.dysfunction_detection",
         company_id=3,
-        rig_id=None,
         asset_id=None,
         settings={"nested": {"shared": "company"}, "company_only": True},
         updated_at=20,
@@ -198,19 +152,25 @@ def test_get_settings_merges_package_remote_company_rig_asset(
         api_client,
         app_key="corva.dysfunction_detection",
         company_id=3,
-        rig_id=10,
-        asset_id=None,
-        settings={"nested": {"rig_only": True}},
+        asset_id=100,
+        settings={"nested": {"program_only": True}, "program_only": True},
         updated_at=30,
     )
     seed_document(
         api_client,
         app_key="corva.dysfunction_detection",
         company_id=3,
-        rig_id=None,
+        asset_id=10,
+        settings={"nested": {"rig_only": True}, "rig_only": True},
+        updated_at=40,
+    )
+    seed_document(
+        api_client,
+        app_key="corva.dysfunction_detection",
+        company_id=3,
         asset_id=1,
         settings={"a": "asset", "asset_only": True},
-        updated_at=40,
+        updated_at=50,
     )
 
     settings = service.get_settings("corva.dysfunction_detection", asset_id=1)
@@ -220,48 +180,57 @@ def test_get_settings_merges_package_remote_company_rig_asset(
         "nested": {
             "package_only": True,
             "shared": "company",
-            "remote_only": True,
+            "program_only": True,
             "rig_only": True,
         },
         "company_only": True,
+        "program_only": True,
+        "rig_only": True,
         "asset_only": True,
     }
 
 
-def test_get_settings_uses_sdk_asset_resolution_to_find_rig(
+def test_get_settings_resolves_all_ancestor_assets_for_requested_asset(
     service: SettingsService, api_client: FakeApiClient
 ) -> None:
     seed_document(
         api_client,
         app_key="corva.dysfunction_detection",
         company_id=3,
-        rig_id=10,
-        asset_id=None,
-        settings={"rig_only": "value"},
+        asset_id=100,
+        settings={"program_only": "program"},
         updated_at=30,
+    )
+    seed_document(
+        api_client,
+        app_key="corva.dysfunction_detection",
+        company_id=3,
+        asset_id=10,
+        settings={"rig_only": "rig"},
+        updated_at=40,
     )
 
     settings = service.get_settings("corva.dysfunction_detection", asset_id=1)
 
-    assert settings["rig_only"] == "value"
+    assert settings["program_only"] == "program"
+    assert settings["rig_only"] == "rig"
 
 
-def test_get_settings_uses_rig_endpoint_when_rig_id_is_provided(
+def test_get_settings_reads_company_scope_without_asset_hierarchy(
     service: SettingsService, api_client: FakeApiClient
 ) -> None:
     seed_document(
         api_client,
         app_key="corva.dysfunction_detection",
         company_id=3,
-        rig_id=10,
         asset_id=None,
-        settings={"rig_only": True},
+        settings={"company_only": True},
         updated_at=30,
     )
 
-    settings = service.get_settings("corva.dysfunction_detection", rig_id=10)
+    settings = service.get_settings("corva.dysfunction_detection", company_id=3)
 
-    assert settings["rig_only"] is True
+    assert settings["company_only"] is True
 
 
 def test_patch_settings_creates_scope_document_and_merges_effective_value(
@@ -271,7 +240,6 @@ def test_patch_settings_creates_scope_document_and_merges_effective_value(
         api_client,
         app_key="corva.dysfunction_detection",
         company_id=3,
-        rig_id=None,
         asset_id=None,
         settings={"nested": {"threshold": 10}},
         updated_at=10,
@@ -297,7 +265,6 @@ def test_delete_keys_reverts_to_inherited_value(service: SettingsService, api_cl
         api_client,
         app_key="corva.dysfunction_detection",
         company_id=3,
-        rig_id=None,
         asset_id=None,
         settings={"a": "company", "nested": {"value": 10}},
         updated_at=10,
@@ -306,7 +273,6 @@ def test_delete_keys_reverts_to_inherited_value(service: SettingsService, api_cl
         api_client,
         app_key="corva.dysfunction_detection",
         company_id=3,
-        rig_id=None,
         asset_id=1,
         settings={"a": "asset", "nested": {"value": 99}},
         updated_at=20,
@@ -330,7 +296,6 @@ def test_replace_settings_appends_full_prior_snapshot_to_history(
         api_client,
         app_key="corva.dysfunction_detection",
         company_id=3,
-        rig_id=None,
         asset_id=None,
         settings={"a": "old"},
         updated_at=10,
@@ -348,7 +313,7 @@ def test_replace_settings_appends_full_prior_snapshot_to_history(
         (
             doc
             for doc in api_client.documents
-            if doc["company_id"] == 3 and doc["asset_id"] is None and doc["rig_id"] is None
+            if doc["company_id"] == 3 and doc["asset_id"] is None
         ),
         key=lambda item: item["timestamp"],
     )
@@ -359,3 +324,12 @@ def test_replace_settings_appends_full_prior_snapshot_to_history(
             "updated_at": 10,
         }
     ]
+
+
+def test_replace_settings_rejects_unscoped_write(service: SettingsService) -> None:
+    with pytest.raises(ValueError, match="must target a company or asset scope"):
+        service.replace_settings(
+            "corva.dysfunction_detection",
+            {"a": "new"},
+            updated_by="new@corva.ai",
+        )

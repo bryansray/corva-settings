@@ -23,49 +23,19 @@ class CorvaResourceResolver:
         self,
         *,
         company_id: int | None = None,
-        rig_id: int | None = None,
         asset_id: int | None = None,
     ) -> ScopeContext:
         resolved_company_id = company_id
-        resolved_rig_id = rig_id
+        asset_ids: list[int] = []
 
         if asset_id is not None:
-            asset_payload = self._get_resource_payload(f"/v2/assets/{asset_id}", fields="*")
-            asset = self._get_attributes(asset_payload)
-            included = asset_payload.get("included", [])
-            resolved_company_id = self._coalesce_int(asset.get("company_id"), resolved_company_id)
-            resolved_company_id = self._coalesce_int(
-                self._find_included_attribute(included, resource_type="company", attribute="id"),
-                resolved_company_id,
-            )
-            if resolved_rig_id is None:
-                resolved_rig_id = self._coalesce_int(asset.get("rig_id"), None)
-            if resolved_rig_id is None:
-                resolved_rig_id = self._coalesce_int(
-                    self._find_relationship_id(asset_payload, relationship="rig"),
-                    None,
-                )
-            if resolved_rig_id is None:
-                resolved_rig_id = self._coalesce_int(
-                    self._find_included_id(included, resource_type="rig"),
-                    None,
-                )
-
-        if resolved_rig_id is not None:
-            rig_payload = self._get_resource_payload(f"/v2/rigs/{resolved_rig_id}", fields="*")
-            resolved_company_id = self._coalesce_int(
-                self._find_relationship_id(rig_payload, relationship="company"),
-                resolved_company_id,
-            )
-            resolved_company_id = self._coalesce_int(
-                self._find_included_attribute(rig_payload.get("included", []), resource_type="company", attribute="id"),
-                resolved_company_id,
+            resolved_company_id, asset_ids = self._resolve_asset_hierarchy(
+                asset_id, resolved_company_id
             )
 
         return ScopeContext(
             company_id=resolved_company_id,
-            rig_id=resolved_rig_id,
-            asset_id=asset_id,
+            asset_ids=tuple(asset_ids),
         )
 
     @staticmethod
@@ -79,30 +49,41 @@ class CorvaResourceResolver:
         response.raise_for_status()
         return dict(response.json())
 
+    def _resolve_asset_hierarchy(
+        self, asset_id: int, company_id: int | None
+    ) -> tuple[int | None, list[int]]:
+        resolved_company_id = company_id
+        lineage: list[int] = []
+        current_asset_id: int | None = asset_id
+
+        while current_asset_id is not None:
+            payload = self._get_resource_payload(
+                f"/v2/assets/{current_asset_id}",
+                fields="asset.name,asset.type,asset.parent_asset_id,include.children,include.company,include.parent_asset",
+            )
+            attributes = self._get_attributes(payload)
+            included = payload.get("included", [])
+
+            lineage.append(current_asset_id)
+            resolved_company_id = self._coalesce_int(
+                attributes.get("company_id"), resolved_company_id
+            )
+            resolved_company_id = self._coalesce_int(
+                self._find_included_attribute(
+                    included, resource_type="company", attribute="id"
+                ),
+                resolved_company_id,
+            )
+            current_asset_id = self._coalesce_int(
+                attributes.get("parent_asset_id"), None
+            )
+
+        lineage.reverse()
+        return resolved_company_id, lineage
+
     @staticmethod
     def _get_attributes(payload: dict[str, Any]) -> dict[str, Any]:
         return dict(payload.get("data", {}).get("attributes", {}))
-
-    @staticmethod
-    def _find_relationship_id(payload: dict[str, Any], *, relationship: str) -> int | None:
-        value = payload.get("data", {}).get("relationships", {}).get(relationship, {}).get("data")
-        if not isinstance(value, dict):
-            return None
-        relationship_id = value.get("id")
-        if relationship_id is None:
-            return None
-        return int(relationship_id)
-
-    @staticmethod
-    def _find_included_id(included: list[dict[str, Any]], *, resource_type: str) -> int | None:
-        for item in included:
-            if item.get("type") != resource_type:
-                continue
-            identifier = item.get("id")
-            if identifier is None:
-                return None
-            return int(identifier)
-        return None
 
     @staticmethod
     def _find_included_attribute(

@@ -22,3 +22,8 @@ where = ["src"]
 dev = [
     "pytest>=9.0.3",
 ]
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: live tests that hit Corva APIs and datasets",
+]

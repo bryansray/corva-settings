@@ -32,10 +32,9 @@ class SettingsService:
         app_key: str,
         *,
         company_id: int | None = None,
-        rig_id: int | None = None,
         asset_id: int | None = None,
     ) -> dict[str, Any]:
-        context = self._resolve_context(company_id=company_id, rig_id=rig_id, asset_id=asset_id)
+        context = self._resolve_context(company_id=company_id, asset_id=asset_id)
         return self._resolve_effective_settings(app_key, context)
 
     def replace_settings(
@@ -45,11 +44,10 @@ class SettingsService:
         *,
         updated_by: str,
         company_id: int | None = None,
-        rig_id: int | None = None,
         asset_id: int | None = None,
     ) -> dict[str, Any]:
-        context = self._resolve_context(company_id=company_id, rig_id=rig_id, asset_id=asset_id)
-        scope = self._scope_for_write(app_key, context, company_id=company_id, rig_id=rig_id, asset_id=asset_id)
+        context = self._resolve_context(company_id=company_id, asset_id=asset_id)
+        scope = self._scope_for_write(app_key, context, company_id=company_id, asset_id=asset_id)
         current = self.repository.fetch_document(scope)
         document = self._build_next_document(scope, dict(settings), updated_by=updated_by, previous=current)
         self.repository.save_document(document)
@@ -62,11 +60,10 @@ class SettingsService:
         *,
         updated_by: str,
         company_id: int | None = None,
-        rig_id: int | None = None,
         asset_id: int | None = None,
     ) -> dict[str, Any]:
-        context = self._resolve_context(company_id=company_id, rig_id=rig_id, asset_id=asset_id)
-        scope = self._scope_for_write(app_key, context, company_id=company_id, rig_id=rig_id, asset_id=asset_id)
+        context = self._resolve_context(company_id=company_id, asset_id=asset_id)
+        scope = self._scope_for_write(app_key, context, company_id=company_id, asset_id=asset_id)
         current = self.repository.fetch_document(scope)
         current_settings = current.settings if current else {}
         next_settings = apply_patch(current_settings, patch)
@@ -81,11 +78,10 @@ class SettingsService:
         *,
         updated_by: str,
         company_id: int | None = None,
-        rig_id: int | None = None,
         asset_id: int | None = None,
     ) -> dict[str, Any]:
-        context = self._resolve_context(company_id=company_id, rig_id=rig_id, asset_id=asset_id)
-        scope = self._scope_for_write(app_key, context, company_id=company_id, rig_id=rig_id, asset_id=asset_id)
+        context = self._resolve_context(company_id=company_id, asset_id=asset_id)
+        scope = self._scope_for_write(app_key, context, company_id=company_id, asset_id=asset_id)
         current = self.repository.fetch_document(scope)
         current_settings = current.settings if current else {}
         next_settings = delete_paths(current_settings, paths)
@@ -106,12 +102,11 @@ class SettingsService:
         self,
         *,
         company_id: int | None,
-        rig_id: int | None,
         asset_id: int | None,
     ) -> ScopeContext:
-        if asset_id is None and rig_id is None:
-            return ScopeContext(company_id=company_id, rig_id=rig_id, asset_id=asset_id)
-        return self.resource_resolver.resolve(company_id=company_id, rig_id=rig_id, asset_id=asset_id)
+        if asset_id is None:
+            return ScopeContext(company_id=company_id)
+        return self.resource_resolver.resolve(company_id=company_id, asset_id=asset_id)
 
     def _scope_for_write(
         self,
@@ -119,35 +114,24 @@ class SettingsService:
         context: ScopeContext,
         *,
         company_id: int | None,
-        rig_id: int | None,
         asset_id: int | None,
     ) -> SettingsScope:
         if asset_id is not None:
             return SettingsScope(
                 app_key=app_key,
                 company_id=context.company_id,
-                rig_id=None,
                 asset_id=asset_id,
             )
-        if rig_id is not None:
-            return SettingsScope(
-                app_key=app_key,
-                company_id=context.company_id,
-                rig_id=context.rig_id,
-                asset_id=None,
-            )
         if company_id is not None:
-            return SettingsScope(app_key=app_key, company_id=context.company_id, rig_id=None, asset_id=None)
-        return SettingsScope(app_key=app_key, company_id=None, rig_id=None, asset_id=None)
+            return SettingsScope(app_key=app_key, company_id=context.company_id, asset_id=None)
+        raise ValueError("settings writes must target a company or asset scope")
 
     def _resolution_chain(self, app_key: str, context: ScopeContext) -> list[SettingsScope]:
-        chain = [SettingsScope(app_key=app_key, company_id=None, rig_id=None, asset_id=None)]
+        chain: list[SettingsScope] = []
         if context.company_id is not None:
-            chain.append(SettingsScope(app_key=app_key, company_id=context.company_id, rig_id=None, asset_id=None))
-        if context.rig_id is not None:
-            chain.append(SettingsScope(app_key=app_key, company_id=context.company_id, rig_id=context.rig_id))
-        if context.asset_id is not None:
-            chain.append(SettingsScope(app_key=app_key, company_id=context.company_id, rig_id=None, asset_id=context.asset_id))
+            chain.append(SettingsScope(app_key=app_key, company_id=context.company_id, asset_id=None))
+        for asset_id in context.asset_ids:
+            chain.append(SettingsScope(app_key=app_key, company_id=context.company_id, asset_id=asset_id))
         return chain
 
     def _build_next_document(

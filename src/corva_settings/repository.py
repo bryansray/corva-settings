@@ -1,4 +1,5 @@
 from __future__ import annotations
+import requests
 
 from collections.abc import Sequence
 from typing import Any, Protocol
@@ -7,15 +8,6 @@ from corva_settings.models import SettingsDocument, SettingsScope
 
 
 class CorvaDatasetClientProtocol(Protocol):
-    def get_data(
-        self, *,
-        provider: str,
-        dataset: str,
-        query: dict[str, Any],
-        sort: dict[str, int],
-        limit: int,
-    ) -> list[dict[str, Any]]: ...
-
     def get_dataset(
         self,
         provider: str,
@@ -35,11 +27,13 @@ class CorvaDatasetClientProtocol(Protocol):
         data: Sequence[dict[str, Any]],
         *,
         produce: bool = False,
-    ) -> dict[str, Any]: ...
+    ) -> requests.Response: ...
 
 
 class CorvaDatasetRepository:
-    def __init__(self, api_client: CorvaDatasetClientProtocol, *, provider: str, dataset: str) -> None:
+    def __init__(
+        self, api_client: CorvaDatasetClientProtocol, *, provider: str, dataset: str
+    ) -> None:
         self.api_client = api_client
         self.provider = provider
         self.dataset = dataset
