@@ -60,7 +60,11 @@ class SettingsService:
         company_id: int | None = None,
         asset_id: int | None = None,
     ) -> SettingsExplanation:
-        """Return the effective settings plus the contributing layers in precedence order."""
+        """Return the merged settings and the contributing layers in precedence order.
+
+        The explanation includes package defaults plus the latest non-deleted dataset
+        document for each scope in the resolved inheritance chain.
+        """
         context = self._resolve_context(company_id=company_id, asset_id=asset_id)
         return self._build_settings_explanation(app_key, context)
 
@@ -73,7 +77,7 @@ class SettingsService:
         company_id: int | None = None,
         asset_id: int | None = None,
     ) -> dict[str, Any]:
-        """Replace the stored settings at one scope and return the resolved result."""
+        """Replace one scope's settings by appending a new version for that scope."""
         context = self._resolve_context(company_id=company_id, asset_id=asset_id)
         scope = self._scope_for_write(app_key, context, company_id=company_id, asset_id=asset_id)
         current = self.repository.fetch_latest_document(scope)
@@ -95,7 +99,7 @@ class SettingsService:
         company_id: int | None = None,
         asset_id: int | None = None,
     ) -> dict[str, Any]:
-        """Apply a dotted-path patch to one scope and return the resolved result."""
+        """Apply a dotted-path patch to one scope by appending a new scope version."""
         context = self._resolve_context(company_id=company_id, asset_id=asset_id)
         scope = self._scope_for_write(app_key, context, company_id=company_id, asset_id=asset_id)
         latest = self.repository.fetch_latest_document(scope)
@@ -119,7 +123,12 @@ class SettingsService:
         company_id: int | None = None,
         asset_id: int | None = None,
     ) -> dict[str, Any]:
-        """Delete dotted-path keys at one scope and return the resolved result."""
+        """Delete dotted-path keys from one scope and return the resolved result.
+
+        This only removes keys from the target scope's latest active settings. If an
+        ancestor scope defines one of the deleted paths, that value may reappear
+        through normal inheritance in the returned effective settings.
+        """
         context = self._resolve_context(company_id=company_id, asset_id=asset_id)
         scope = self._scope_for_write(app_key, context, company_id=company_id, asset_id=asset_id)
         latest = self.repository.fetch_latest_document(scope)
@@ -142,7 +151,11 @@ class SettingsService:
         company_id: int | None = None,
         asset_id: int | None = None,
     ) -> dict[str, Any]:
-        """Write an empty active document for one scope and return inherited settings."""
+        """Append an empty active version for one scope and return inherited settings.
+
+        The scope remains active, but it no longer contributes any keys until a later
+        version writes settings for that scope again.
+        """
         context = self._resolve_context(company_id=company_id, asset_id=asset_id)
         scope = self._scope_for_write(app_key, context, company_id=company_id, asset_id=asset_id)
         current = self.repository.fetch_latest_document(scope)
@@ -163,7 +176,11 @@ class SettingsService:
         company_id: int | None = None,
         asset_id: int | None = None,
     ) -> dict[str, Any]:
-        """Logically delete one scope and return the remaining inherited settings."""
+        """Append a tombstone version for one scope and return the inherited result.
+
+        After a scope is deleted, reads ignore that scope until a later non-deleted
+        version is written for the same scope.
+        """
         context = self._resolve_context(company_id=company_id, asset_id=asset_id)
         scope = self._scope_for_write(app_key, context, company_id=company_id, asset_id=asset_id)
         current = self.repository.fetch_latest_document(scope)
@@ -188,7 +205,11 @@ class SettingsService:
         limit: int = 100,
         include_deleted: bool = True,
     ) -> list[SettingsDocument]:
-        """List stored versions for one concrete scope, newest first."""
+        """List stored versions for one concrete scope, newest first.
+
+        Deleted versions are included by default so callers can inspect tombstones and
+        full append-only history.
+        """
         context = self._resolve_context(company_id=company_id, asset_id=asset_id)
         scope = self._scope_for_write(app_key, context, company_id=company_id, asset_id=asset_id)
         return self.repository.list_documents(scope, limit=limit, include_deleted=include_deleted)
@@ -202,7 +223,12 @@ class SettingsService:
         company_id: int | None = None,
         asset_id: int | None = None,
     ) -> dict[str, Any]:
-        """Append a new latest version by copying settings from an earlier active version."""
+        """Append a new latest version by copying settings from an earlier version.
+
+        This preserves append-only history. Rollback does not mutate or delete older
+        versions; it creates a new head version whose settings match the requested
+        earlier active version.
+        """
         context = self._resolve_context(company_id=company_id, asset_id=asset_id)
         scope = self._scope_for_write(app_key, context, company_id=company_id, asset_id=asset_id)
         target = self.repository.fetch_document_version(scope, version)
@@ -227,7 +253,7 @@ class SettingsService:
         company_id: int | None = None,
         asset_id: int | None = None,
     ) -> list[SettingsScope]:
-        """List non-deleted stored scopes that contribute to the requested resolution chain."""
+        """List non-deleted scopes currently contributing to the resolution chain."""
         context = self._resolve_context(company_id=company_id, asset_id=asset_id)
         return [
             scope
