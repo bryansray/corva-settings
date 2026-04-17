@@ -21,6 +21,8 @@ format-fix:
 type-check:
     uv run ty check src tests
 
+validate: lint format type-check
+
 build:
     uv build
 
