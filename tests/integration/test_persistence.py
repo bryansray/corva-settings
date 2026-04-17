@@ -177,6 +177,54 @@ def test_replace_settings_persists_company_scoped_document_to_dataset() -> None:
     assert document["data"]["deleted"] is False
 
 
+def test_replace_settings_uses_default_app_settings_dataset() -> None:
+    api = _build_api()
+    provider = _test_provider()
+    dataset = "app.settings"
+    company_id = _test_company_id()
+    unique_app_key = f"corva-settings.integration.{uuid4()}"
+    updated_by = "corva-settings-integration-test"
+    now = int(time())
+
+    service = SettingsService(
+        cast(SettingsApiClientProtocol, api),
+        provider=provider,
+        package_defaults={},
+        clock=lambda: now,
+    )
+
+    expected_settings = {
+        "integration_run_id": str(uuid4()),
+        "uses_default_dataset": True,
+    }
+
+    resolved = service.replace_settings(
+        unique_app_key,
+        expected_settings,
+        updated_by=updated_by,
+        company_id=company_id,
+    )
+
+    assert resolved == expected_settings
+
+    document = _fetch_latest_scope_document(
+        api,
+        provider=provider,
+        dataset=dataset,
+        app_key=unique_app_key,
+        company_id=company_id,
+    )
+    assert document["app_key"] == unique_app_key
+    assert document["company_id"] == company_id
+    assert document["asset_id"] is None
+    assert document["timestamp"] == now
+    assert document["version"] == 1
+    assert document["data"]["settings"] == expected_settings
+    assert document["data"]["updated_by"] == updated_by
+    assert document["data"]["updated_at"] == now
+    assert document["data"]["deleted"] is False
+
+
 def test_replace_settings_appends_new_scope_document_version() -> None:
     api = _build_api()
     provider = _test_provider()
