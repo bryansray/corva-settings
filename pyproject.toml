@@ -21,9 +21,21 @@ where = ["src"]
 [dependency-groups]
 dev = [
     "pytest>=9.0.3",
+    "ruff>=0.12.0",
+    "ty>=0.0.31",
 ]
 
 [tool.pytest.ini_options]
 markers = [
     "integration: live tests that hit Corva APIs and datasets",
 ]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.ty.environment]
+python-version = "3.13"
+root = ["src", "."]
