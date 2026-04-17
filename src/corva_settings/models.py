@@ -21,28 +21,6 @@ class SettingsScope:
 
 
 @dataclass(slots=True)
-class SettingsHistoryEntry:
-    settings: dict[str, Any]
-    updated_by: str
-    updated_at: int
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "settings": self.settings,
-            "updated_by": self.updated_by,
-            "updated_at": self.updated_at,
-        }
-
-    @classmethod
-    def from_dict(cls, payload: dict[str, Any]) -> SettingsHistoryEntry:
-        return cls(
-            settings=dict(payload.get("settings", {})),
-            updated_by=str(payload.get("updated_by", "")),
-            updated_at=int(payload.get("updated_at", 0)),
-        )
-
-
-@dataclass(slots=True)
 class SettingsDocument:
     app_key: str
     data: dict[str, Any]
@@ -69,11 +47,6 @@ class SettingsDocument:
         return bool(self.data.get("deleted", False))
 
     @property
-    def history(self) -> list[SettingsHistoryEntry]:
-        raw_history = self.data.get("history", [])
-        return [SettingsHistoryEntry.from_dict(entry) for entry in raw_history]
-
-    @property
     def scope(self) -> SettingsScope:
         return SettingsScope(
             app_key=self.app_key,
@@ -93,7 +66,6 @@ class SettingsDocument:
                 "updated_by": self.updated_by,
                 "updated_at": self.updated_at,
                 "deleted": self.deleted,
-                "history": [entry.to_dict() for entry in self.history],
             },
             "timestamp": self.timestamp,
         }
@@ -101,9 +73,6 @@ class SettingsDocument:
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> SettingsDocument:
         data = dict(payload.get("data", {}))
-        history = [
-            SettingsHistoryEntry.from_dict(entry).to_dict() for entry in data.get("history", [])
-        ]
         return cls(
             _id=payload.get("_id"),
             app_key=str(payload["app_key"]),
@@ -114,9 +83,9 @@ class SettingsDocument:
                 "updated_by": str(data.get("updated_by", "")),
                 "updated_at": int(data.get("updated_at", payload.get("timestamp", 0))),
                 "deleted": bool(data.get("deleted", False)),
-                "history": history,
             },
             timestamp=int(payload["timestamp"]),
+            version=int(payload.get("version", 1)),
         )
 
     @classmethod
@@ -127,7 +96,7 @@ class SettingsDocument:
         settings: dict[str, Any],
         updated_by: str,
         updated_at: int,
-        history: list[SettingsHistoryEntry] | None = None,
+        version: int,
         deleted: bool = False,
         _id: str | None = None,
     ) -> SettingsDocument:
@@ -137,20 +106,13 @@ class SettingsDocument:
             company_id=scope.company_id,
             asset_id=scope.asset_id,
             timestamp=updated_at,
+            version=version,
             data={
                 "settings": dict(settings),
                 "updated_by": updated_by,
                 "updated_at": updated_at,
                 "deleted": deleted,
-                "history": [entry.to_dict() for entry in (history or [])],
             },
-        )
-
-    def snapshot(self) -> SettingsHistoryEntry:
-        return SettingsHistoryEntry(
-            settings=self.settings,
-            updated_by=self.updated_by,
-            updated_at=self.updated_at,
         )
 
 

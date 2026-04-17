@@ -9,7 +9,6 @@ from corva_settings.merge import apply_patch, deep_merge, delete_paths
 from corva_settings.models import (
     ScopeContext,
     SettingsDocument,
-    SettingsHistoryEntry,
     SettingsScope,
 )
 from corva_settings.repository import CorvaDatasetClientProtocol, CorvaDatasetRepository
@@ -61,7 +60,7 @@ class SettingsService:
         """Replace the stored settings at one scope and return the resolved result."""
         context = self._resolve_context(company_id=company_id, asset_id=asset_id)
         scope = self._scope_for_write(app_key, context, company_id=company_id, asset_id=asset_id)
-        current = self.repository.fetch_document(scope)
+        current = self.repository.fetch_latest_document(scope)
         document = self._build_next_document(
             scope,
             dict(settings),
@@ -83,14 +82,14 @@ class SettingsService:
         """Apply a dotted-path patch to one scope and return the resolved result."""
         context = self._resolve_context(company_id=company_id, asset_id=asset_id)
         scope = self._scope_for_write(app_key, context, company_id=company_id, asset_id=asset_id)
-        current = self.repository.fetch_document(scope)
-        current_settings = current.settings if current else {}
+        latest = self.repository.fetch_latest_document(scope)
+        current_settings = latest.settings if latest and not latest.deleted else {}
         next_settings = apply_patch(current_settings, patch)
         document = self._build_next_document(
             scope,
             next_settings,
             updated_by=updated_by,
-            previous=current,
+            previous=latest,
         )
         self.repository.save_document(document)
         return self._resolve_effective_settings(app_key, context)
@@ -107,14 +106,14 @@ class SettingsService:
         """Delete dotted-path keys at one scope and return the resolved result."""
         context = self._resolve_context(company_id=company_id, asset_id=asset_id)
         scope = self._scope_for_write(app_key, context, company_id=company_id, asset_id=asset_id)
-        current = self.repository.fetch_document(scope)
-        current_settings = current.settings if current else {}
+        latest = self.repository.fetch_latest_document(scope)
+        current_settings = latest.settings if latest and not latest.deleted else {}
         next_settings = delete_paths(current_settings, paths)
         document = self._build_next_document(
             scope,
             next_settings,
             updated_by=updated_by,
-            previous=current,
+            previous=latest,
         )
         self.repository.save_document(document)
         return self._resolve_effective_settings(app_key, context)
@@ -130,7 +129,7 @@ class SettingsService:
         """Write an empty active document for one scope and return inherited settings."""
         context = self._resolve_context(company_id=company_id, asset_id=asset_id)
         scope = self._scope_for_write(app_key, context, company_id=company_id, asset_id=asset_id)
-        current = self.repository.fetch_document(scope)
+        current = self.repository.fetch_latest_document(scope)
         document = self._build_next_document(
             scope,
             {},
@@ -151,8 +150,8 @@ class SettingsService:
         """Logically delete one scope and return the remaining inherited settings."""
         context = self._resolve_context(company_id=company_id, asset_id=asset_id)
         scope = self._scope_for_write(app_key, context, company_id=company_id, asset_id=asset_id)
-        current = self.repository.fetch_document(scope)
-        if current is None:
+        current = self.repository.fetch_latest_document(scope)
+        if current is None or current.deleted:
             return self._resolve_effective_settings(app_key, context)
         document = self._build_next_document(
             scope,
@@ -160,6 +159,47 @@ class SettingsService:
             updated_by=updated_by,
             previous=current,
             deleted=True,
+        )
+        self.repository.save_document(document)
+        return self._resolve_effective_settings(app_key, context)
+
+    def list_versions(
+        self,
+        app_key: str,
+        *,
+        company_id: int | None = None,
+        asset_id: int | None = None,
+        limit: int = 100,
+        include_deleted: bool = True,
+    ) -> list[SettingsDocument]:
+        """List stored versions for one concrete scope, newest first."""
+        context = self._resolve_context(company_id=company_id, asset_id=asset_id)
+        scope = self._scope_for_write(app_key, context, company_id=company_id, asset_id=asset_id)
+        return self.repository.list_documents(scope, limit=limit, include_deleted=include_deleted)
+
+    def rollback_settings(
+        self,
+        app_key: str,
+        *,
+        version: int,
+        updated_by: str,
+        company_id: int | None = None,
+        asset_id: int | None = None,
+    ) -> dict[str, Any]:
+        """Append a new latest version by copying settings from an earlier active version."""
+        context = self._resolve_context(company_id=company_id, asset_id=asset_id)
+        scope = self._scope_for_write(app_key, context, company_id=company_id, asset_id=asset_id)
+        target = self.repository.fetch_document_version(scope, version)
+        if target is None:
+            raise ValueError(f"settings version {version} was not found for the requested scope")
+        if target.deleted:
+            raise ValueError(f"settings version {version} is a tombstone and cannot be rolled back")
+        latest = self.repository.fetch_latest_document(scope)
+        document = self._build_next_document(
+            scope,
+            target.settings,
+            updated_by=updated_by,
+            previous=latest,
         )
         self.repository.save_document(document)
         return self._resolve_effective_settings(app_key, context)
@@ -241,16 +281,13 @@ class SettingsService:
         previous: SettingsDocument | None = None,
         deleted: bool = False,
     ) -> SettingsDocument:
-        """Create the next versioned document for a scope, preserving prior history."""
+        """Create the next append-only versioned document for a scope."""
         updated_at = self.clock()
-        history: list[SettingsHistoryEntry] = previous.history if previous else []
-        if previous is not None:
-            history = [*history, previous.snapshot()]
         return SettingsDocument.build(
             scope,
             settings=settings,
             updated_by=updated_by,
             updated_at=updated_at,
-            history=history,
+            version=(previous.version + 1) if previous else 1,
             deleted=deleted,
         )

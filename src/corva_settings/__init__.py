@@ -1,7 +1,6 @@
 from corva_settings.models import (
     ScopeContext,
     SettingsDocument,
-    SettingsHistoryEntry,
     SettingsScope,
 )
 from corva_settings.repository import CorvaDatasetRepository
@@ -13,7 +12,6 @@ __all__ = [
     "CorvaResourceResolver",
     "ScopeContext",
     "SettingsDocument",
-    "SettingsHistoryEntry",
     "SettingsScope",
     "SettingsService",
 ]

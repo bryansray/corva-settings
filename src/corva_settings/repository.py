@@ -50,7 +50,7 @@ class CorvaDatasetRepository:
             provider=self.provider,
             dataset=self.dataset,
             query=scope.to_query(),
-            sort={"timestamp": -1},
+            sort={"version": -1, "timestamp": -1},
             limit=1,
             skip=0,
         )
@@ -61,6 +61,48 @@ class CorvaDatasetRepository:
         if not isinstance(document, dict):
             raise TypeError("Expected mapping document from Corva API client")
         return SettingsDocument.from_dict(document)
+
+    def fetch_document_version(self, scope: SettingsScope, version: int) -> SettingsDocument | None:
+        results = self.api_client.get_dataset(
+            provider=self.provider,
+            dataset=self.dataset,
+            query={**scope.to_query(), "version": version},
+            sort={"version": -1, "timestamp": -1},
+            limit=1,
+            skip=0,
+        )
+        if not results:
+            return None
+
+        document = results[0]
+        if not isinstance(document, dict):
+            raise TypeError("Expected mapping document from Corva API client")
+        return SettingsDocument.from_dict(document)
+
+    def list_documents(
+        self,
+        scope: SettingsScope,
+        *,
+        limit: int = 100,
+        include_deleted: bool = True,
+    ) -> list[SettingsDocument]:
+        results = self.api_client.get_dataset(
+            provider=self.provider,
+            dataset=self.dataset,
+            query=scope.to_query(),
+            sort={"version": -1, "timestamp": -1},
+            limit=limit,
+            skip=0,
+        )
+        documents = []
+        for document in results:
+            if not isinstance(document, dict):
+                raise TypeError("Expected mapping document from Corva API client")
+            parsed = SettingsDocument.from_dict(document)
+            if parsed.deleted and not include_deleted:
+                continue
+            documents.append(parsed)
+        return documents
 
     def save_document(self, document: SettingsDocument) -> SettingsDocument:
         self.api_client.insert_data(self.provider, self.dataset, [document.to_dict()])

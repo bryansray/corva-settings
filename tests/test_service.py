@@ -45,7 +45,8 @@ class FakeApiClient:
             for document in self.documents
             if all(document.get(key) == value for key, value in query.items())
         ]
-        matching.sort(key=lambda item: item["timestamp"], reverse=sort.get("timestamp", -1) < 0)
+        for field, direction in reversed(list(sort.items())):
+            matching.sort(key=lambda item: item[field], reverse=direction < 0)
         return matching[skip : skip + limit]
 
     def insert_data(
@@ -97,6 +98,8 @@ def seed_document(
     company_id: int | None,
     asset_id: int | None,
     updated_by: str = "seed@corva.ai",
+    version: int = 1,
+    deleted: bool = False,
 ) -> None:
     api_client.documents.append(
         {
@@ -104,12 +107,12 @@ def seed_document(
             "app_key": app_key,
             "company_id": company_id,
             "asset_id": asset_id,
+            "version": version,
             "data": {
                 "settings": deepcopy(settings),
                 "updated_by": updated_by,
                 "updated_at": updated_at,
-                "deleted": False,
-                "history": [],
+                "deleted": deleted,
             },
             "timestamp": updated_at,
         }
@@ -132,7 +135,7 @@ def api_client() -> FakeApiClient:
 
 @pytest.fixture
 def service(api_client: FakeApiClient) -> SettingsService:
-    clock_values = iter([100, 200, 300, 400, 500, 600, 700, 800, 900, 1000])
+    clock_values = iter([100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200])
     return SettingsService(
         cast(SettingsApiClientProtocol, api_client),
         dataset="app.settings",
@@ -300,7 +303,7 @@ def test_delete_keys_reverts_to_inherited_value(
     assert settings["nested"]["value"] == 10
 
 
-def test_replace_settings_appends_full_prior_snapshot_to_history(
+def test_replace_settings_appends_new_scope_version(
     service: SettingsService, api_client: FakeApiClient
 ) -> None:
     seed_document(
@@ -324,13 +327,12 @@ def test_replace_settings_appends_full_prior_snapshot_to_history(
         (doc for doc in api_client.documents if doc["company_id"] == 3 and doc["asset_id"] is None),
         key=lambda item: item["timestamp"],
     )
-    assert latest_company_document["data"]["history"] == [
-        {
-            "settings": {"a": "old"},
-            "updated_by": "old@corva.ai",
-            "updated_at": 10,
-        }
-    ]
+    assert latest_company_document["version"] == 2
+    previous_company_document = min(
+        (doc for doc in api_client.documents if doc["company_id"] == 3 and doc["asset_id"] is None),
+        key=lambda item: item["timestamp"],
+    )
+    assert previous_company_document["data"]["settings"] == {"a": "old"}
 
 
 def test_replace_settings_rejects_unscoped_write(service: SettingsService) -> None:
@@ -414,6 +416,7 @@ def test_clear_settings_preserves_scope_and_reverts_to_inherited_values(
     )
     assert latest_asset_document["data"]["settings"] == {}
     assert latest_asset_document["data"]["deleted"] is False
+    assert latest_asset_document["version"] == 2
 
     scopes = service.list_scopes("corva.dysfunction_detection", asset_id=1)
     assert scopes[-1] == SettingsScope("corva.dysfunction_detection", company_id=3, asset_id=1)
@@ -453,9 +456,101 @@ def test_delete_scope_hides_deleted_scope_without_revealing_prior_version(
     )
     assert latest_asset_document["data"]["settings"] == {}
     assert latest_asset_document["data"]["deleted"] is True
+    assert latest_asset_document["version"] == 2
 
     current_asset_settings = service.get_settings("corva.dysfunction_detection", asset_id=1)
     assert current_asset_settings["a"] == "company"
     assert service.list_scopes("corva.dysfunction_detection", asset_id=1) == [
         SettingsScope("corva.dysfunction_detection", company_id=3, asset_id=None)
     ]
+
+
+def test_list_versions_returns_newest_first_with_versions(
+    service: SettingsService, api_client: FakeApiClient
+) -> None:
+    seed_document(
+        api_client,
+        app_key="corva.dysfunction_detection",
+        company_id=3,
+        asset_id=None,
+        settings={"a": "v1"},
+        updated_at=10,
+        version=1,
+    )
+    seed_document(
+        api_client,
+        app_key="corva.dysfunction_detection",
+        company_id=3,
+        asset_id=None,
+        settings={"a": "v2"},
+        updated_at=20,
+        version=2,
+    )
+
+    versions = service.list_versions("corva.dysfunction_detection", company_id=3)
+
+    assert [document.version for document in versions] == [2, 1]
+    assert [document.settings for document in versions] == [{"a": "v2"}, {"a": "v1"}]
+
+
+def test_rollback_settings_appends_new_latest_version_from_prior_version(
+    service: SettingsService, api_client: FakeApiClient
+) -> None:
+    seed_document(
+        api_client,
+        app_key="corva.dysfunction_detection",
+        company_id=3,
+        asset_id=None,
+        settings={"a": "v1"},
+        updated_at=10,
+        version=1,
+    )
+    seed_document(
+        api_client,
+        app_key="corva.dysfunction_detection",
+        company_id=3,
+        asset_id=None,
+        settings={"a": "v2"},
+        updated_at=20,
+        version=2,
+    )
+
+    settings = service.rollback_settings(
+        "corva.dysfunction_detection",
+        version=1,
+        updated_by="user@corva.ai",
+        company_id=3,
+    )
+
+    assert settings["a"] == "v1"
+
+    latest_company_document = max(
+        (doc for doc in api_client.documents if doc["company_id"] == 3 and doc["asset_id"] is None),
+        key=lambda item: item["version"],
+    )
+    assert latest_company_document["version"] == 3
+    assert latest_company_document["data"]["settings"] == {"a": "v1"}
+    assert latest_company_document["data"]["updated_by"] == "user@corva.ai"
+
+
+def test_rollback_settings_rejects_deleted_target_version(
+    service: SettingsService, api_client: FakeApiClient
+) -> None:
+    seed_document(
+        api_client,
+        app_key="corva.dysfunction_detection",
+        company_id=3,
+        asset_id=None,
+        settings={},
+        updated_at=10,
+        version=1,
+        deleted=True,
+    )
+
+    with pytest.raises(ValueError, match="tombstone"):
+        service.rollback_settings(
+            "corva.dysfunction_detection",
+            version=1,
+            updated_by="user@corva.ai",
+            company_id=3,
+        )
