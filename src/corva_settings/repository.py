@@ -62,5 +62,7 @@ class CorvaDatasetRepository:
         return SettingsDocument.from_dict(document)
 
     def save_document(self, document: SettingsDocument) -> SettingsDocument:
-        self.api_client.insert_data(self.provider, self.dataset, [document.to_dict()])
+        response = self.api_client.insert_data(
+            self.provider, self.dataset, [document.to_dict()]
+        )
         return document
