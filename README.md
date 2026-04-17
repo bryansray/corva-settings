@@ -26,6 +26,7 @@ Additional guides:
 
 - [docs/settings-hierarchy.md](docs/settings-hierarchy.md): how inheritance works across company, rig, and well scopes
 - [docs/deleting-keys.md](docs/deleting-keys.md): how `delete_keys(...)` interacts with inheritance and append-only versioning
+- [docs/rollback-and-version-history.md](docs/rollback-and-version-history.md): how append-only versions, tombstones, and rollback behave
 
 ## Storage Model
 
