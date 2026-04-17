@@ -1,6 +1,6 @@
 # corva-settings
 
-`corva-settings` is a reusable settings library for Corva applications. It resolves configuration by scope, persists versioned documents into a Corva dataset, and keeps same-scope history snapshots for later inspection.
+`corva-settings` is a reusable settings library for Corva applications. It resolves configuration by scope and persists append-only versioned documents into a Corva dataset.
 
 ## Resolution order
 
@@ -20,6 +20,25 @@ Persisted scopes are limited to:
 
 Unscoped dataset queries are invalid. Package defaults are the only global layer.
 
+## Storage Model
+
+Each write appends a new document version for one scope. The latest version is treated as the live state for that scope, and older documents are the version history.
+
+This library assumes the dataset can store multiple documents for the same:
+
+- `app_key`
+- `company_id`
+- `asset_id`
+
+In practice, the dataset index must support append-only versions per scope. A scope-only unique index on `app_key + company_id + asset_id` is not compatible with this model.
+
+Recommended index strategy:
+
+- required unique index: `app_key + company_id + asset_id + version`
+- optional read-optimized index: `app_key + company_id + asset_id + version desc`
+
+The required unique index guarantees that each scope/version pair is unique while still allowing multiple versions for the same scope. The optional descending read index improves “latest version for scope” queries if the collection becomes hot.
+
 ## Stored payload shape
 
 ```json
@@ -35,24 +54,13 @@ Unscoped dataset queries are invalid. Package defaults are the only global layer
     },
     "updated_by": "user@corva.ai",
     "updated_at": 1710000000,
-    "deleted": false,
-    "history": [
-      {
-        "settings": {
-          "feature_enabled": false
-        },
-        "updated_by": "user@corva.ai",
-        "updated_at": 1700000000
-      }
-    ]
+    "deleted": false
   },
   "timestamp": 1710000000
 }
 ```
 
-`history` is write history for the same stored scope document. Inheritance provenance is not mixed into history.
-
-`deleted` marks a logical delete tombstone for a scope. Reads and scope listing ignore a scope whose latest document is marked deleted.
+Older documents for the same scope are the history. `deleted` marks a logical delete tombstone for a scope. Reads and scope listing ignore a scope whose latest document is marked deleted.
 
 ## Public API
 
@@ -85,12 +93,25 @@ cleared = service.clear_settings(
     updated_by="user@corva.ai",
     asset_id=123,
 )
+
+versions = service.list_versions(
+    "corva.dysfunction_detection",
+    asset_id=123,
+)
+
+rolled_back = service.rollback_settings(
+    "corva.dysfunction_detection",
+    version=2,
+    updated_by="user@corva.ai",
+    asset_id=123,
+)
 ```
 
 Supported read and inspection operations:
 
 - `get_settings`
 - `list_scopes`
+- `list_versions`
 
 Supported write operations:
 
@@ -99,6 +120,7 @@ Supported write operations:
 - `delete_keys`
 - `clear_settings`
 - `delete_scope`
+- `rollback_settings`
 
 Writes are scoped to either:
 
@@ -111,6 +133,8 @@ Operation semantics:
 - `clear_settings` writes an empty active document for the target scope
 - `delete_scope` writes a logical delete tombstone for the target scope
 - `list_scopes` returns the non-deleted scopes present in the applicable resolution chain
+- `list_versions` returns stored versions for one concrete scope, newest first
+- `rollback_settings` appends a new latest version by copying the settings from an older version
 
 ## Expected API client surface
 

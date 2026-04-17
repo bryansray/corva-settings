@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This repository contains `corva-settings`, a reusable settings library for Corva applications. The library resolves effective settings by scope, persists versioned scope documents into a Corva dataset, and keeps same-scope history snapshots for auditability.
+This repository contains `corva-settings`, a reusable settings library for Corva applications. The library resolves effective settings by scope and persists append-only versioned scope documents into a Corva dataset.
 
 This file is the working context and collaboration contract for future changes in this repo.
 
@@ -39,6 +39,27 @@ Read resolution order:
 
 Asset reads resolve ancestry by following `parent_asset_id` via `/v2/assets/{asset_id}`.
 
+## Storage Model
+
+The repository uses an append-only versioned document model per scope:
+
+- each write appends a new document
+- the latest version for a scope is the live state
+- older documents for that scope are the history
+
+Embedded history inside one document is not used. Version history lives in the dataset as prior scope documents.
+
+The dataset must support multiple documents for the same:
+
+- `app_key`
+- `company_id`
+- `asset_id`
+
+Recommended index strategy:
+
+- required unique index on `app_key + company_id + asset_id + version`
+- optional read-optimized index on `app_key + company_id + asset_id + version desc`
+
 ## Write Model
 
 Supported write operations:
@@ -48,14 +69,22 @@ Supported write operations:
 - `delete_keys`
 - `clear_settings`
 - `delete_scope`
+- `rollback_settings`
+
+Supported read and inspection operations:
+
+- `get_settings`
+- `list_scopes`
+- `list_versions`
 
 Behavior:
 
 - Writes must target either a company scope or an asset scope.
-- Same-scope writes append a new versioned document and preserve prior state in `history`.
+- Same-scope writes append a new versioned document.
 - `clear_settings` writes an empty active document for the target scope.
 - `delete_scope` is a logical delete, not a physical delete. It writes a tombstone document with `data.deleted=True`.
 - Reads and `list_scopes` ignore tombstoned latest documents so deleted scopes do not reappear through older versions.
+- `rollback_settings` appends a new latest version whose settings are copied from an older version.
 
 ## Dataset Shape
 
@@ -66,9 +95,8 @@ Stored documents include:
 - `data.updated_by`
 - `data.updated_at`
 - `data.deleted`
-- `data.history`
 
-`history` is same-scope version history only. It does not describe inherited contributions from parent scopes.
+Older documents are the same-scope version history.
 
 ## API Client Assumptions
 
