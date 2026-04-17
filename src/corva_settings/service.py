@@ -12,6 +12,8 @@ from corva_settings.resolver import CorvaResourceClientProtocol, CorvaResourceRe
 
 
 class SettingsService:
+    """Resolve and persist scoped settings documents."""
+
     def __init__(
         self,
         api_client: CorvaDatasetClientProtocol & CorvaResourceClientProtocol,
@@ -34,6 +36,7 @@ class SettingsService:
         company_id: int | None = None,
         asset_id: int | None = None,
     ) -> dict[str, Any]:
+        """Return the effective settings for the requested scope."""
         context = self._resolve_context(company_id=company_id, asset_id=asset_id)
         return self._resolve_effective_settings(app_key, context)
 
@@ -46,6 +49,7 @@ class SettingsService:
         company_id: int | None = None,
         asset_id: int | None = None,
     ) -> dict[str, Any]:
+        """Replace the stored settings at one scope and return the resolved result."""
         context = self._resolve_context(company_id=company_id, asset_id=asset_id)
         scope = self._scope_for_write(app_key, context, company_id=company_id, asset_id=asset_id)
         current = self.repository.fetch_document(scope)
@@ -67,6 +71,7 @@ class SettingsService:
         company_id: int | None = None,
         asset_id: int | None = None,
     ) -> dict[str, Any]:
+        """Apply a dotted-path patch to one scope and return the resolved result."""
         context = self._resolve_context(company_id=company_id, asset_id=asset_id)
         scope = self._scope_for_write(app_key, context, company_id=company_id, asset_id=asset_id)
         current = self.repository.fetch_document(scope)
@@ -90,6 +95,7 @@ class SettingsService:
         company_id: int | None = None,
         asset_id: int | None = None,
     ) -> dict[str, Any]:
+        """Delete dotted-path keys at one scope and return the resolved result."""
         context = self._resolve_context(company_id=company_id, asset_id=asset_id)
         scope = self._scope_for_write(app_key, context, company_id=company_id, asset_id=asset_id)
         current = self.repository.fetch_document(scope)
@@ -112,6 +118,7 @@ class SettingsService:
         company_id: int | None = None,
         asset_id: int | None = None,
     ) -> dict[str, Any]:
+        """Write an empty active document for one scope and return inherited settings."""
         context = self._resolve_context(company_id=company_id, asset_id=asset_id)
         scope = self._scope_for_write(app_key, context, company_id=company_id, asset_id=asset_id)
         current = self.repository.fetch_document(scope)
@@ -132,6 +139,7 @@ class SettingsService:
         company_id: int | None = None,
         asset_id: int | None = None,
     ) -> dict[str, Any]:
+        """Logically delete one scope and return the remaining inherited settings."""
         context = self._resolve_context(company_id=company_id, asset_id=asset_id)
         scope = self._scope_for_write(app_key, context, company_id=company_id, asset_id=asset_id)
         current = self.repository.fetch_document(scope)
@@ -154,6 +162,7 @@ class SettingsService:
         company_id: int | None = None,
         asset_id: int | None = None,
     ) -> list[SettingsScope]:
+        """List non-deleted stored scopes that contribute to the requested resolution chain."""
         context = self._resolve_context(company_id=company_id, asset_id=asset_id)
         return [
             scope
@@ -162,6 +171,7 @@ class SettingsService:
         ]
 
     def _resolve_effective_settings(self, app_key: str, context: ScopeContext) -> dict[str, Any]:
+        """Merge package defaults with stored scope documents in precedence order."""
         merged = deepcopy(self.package_defaults.get(app_key, {}))
         for scope in self._resolution_chain(app_key, context):
             document = self.repository.fetch_document(scope)
@@ -176,6 +186,7 @@ class SettingsService:
         company_id: int | None,
         asset_id: int | None,
     ) -> ScopeContext:
+        """Resolve company and asset ancestry metadata needed for scoped reads and writes."""
         if asset_id is None:
             return ScopeContext(company_id=company_id)
         return self.resource_resolver.resolve(company_id=company_id, asset_id=asset_id)
@@ -188,6 +199,7 @@ class SettingsService:
         company_id: int | None,
         asset_id: int | None,
     ) -> SettingsScope:
+        """Validate and normalize the concrete persisted scope for one write."""
         if asset_id is not None:
             return SettingsScope(
                 app_key=app_key,
@@ -199,6 +211,7 @@ class SettingsService:
         raise ValueError("settings writes must target a company or asset scope")
 
     def _resolution_chain(self, app_key: str, context: ScopeContext) -> list[SettingsScope]:
+        """Build the ordered list of persisted scopes used during read resolution."""
         chain: list[SettingsScope] = []
         if context.company_id is not None:
             chain.append(SettingsScope(app_key=app_key, company_id=context.company_id, asset_id=None))
@@ -215,6 +228,7 @@ class SettingsService:
         previous: SettingsDocument | None = None,
         deleted: bool = False,
     ) -> SettingsDocument:
+        """Create the next versioned document for a scope, preserving prior history."""
         updated_at = self.clock()
         history: list[SettingsHistoryEntry] = previous.history if previous else []
         if previous is not None:
