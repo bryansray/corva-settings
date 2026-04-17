@@ -5,7 +5,9 @@ from copy import deepcopy
 from typing import Any
 
 
-def deep_merge(base: Mapping[str, Any] | None, override: Mapping[str, Any] | None) -> dict[str, Any]:
+def deep_merge(
+    base: Mapping[str, Any] | None, override: Mapping[str, Any] | None
+) -> dict[str, Any]:
     if base is None and override is None:
         return {}
     if base is None:
@@ -17,7 +19,9 @@ def deep_merge(base: Mapping[str, Any] | None, override: Mapping[str, Any] | Non
     return _deep_merge_into(merged, override)
 
 
-def _deep_merge_into(target: MutableMapping[str, Any], override: Mapping[str, Any]) -> dict[str, Any]:
+def _deep_merge_into(
+    target: MutableMapping[str, Any], override: Mapping[str, Any]
+) -> dict[str, Any]:
     for key, value in override.items():
         current = target.get(key)
         if isinstance(current, MutableMapping) and isinstance(value, Mapping):

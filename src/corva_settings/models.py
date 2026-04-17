@@ -102,8 +102,7 @@ class SettingsDocument:
     def from_dict(cls, payload: dict[str, Any]) -> SettingsDocument:
         data = dict(payload.get("data", {}))
         history = [
-            SettingsHistoryEntry.from_dict(entry).to_dict()
-            for entry in data.get("history", [])
+            SettingsHistoryEntry.from_dict(entry).to_dict() for entry in data.get("history", [])
         ]
         return cls(
             _id=payload.get("_id"),

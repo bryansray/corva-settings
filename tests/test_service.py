@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import sys
 from copy import deepcopy
 from pathlib import Path
-import sys
 from typing import Any
 
 import pytest
@@ -70,7 +70,9 @@ class FakeApiClient:
                     "data": {
                         "attributes": asset,
                         "relationships": {
-                            "company": {"data": {"id": str(asset["company_id"]), "type": "company"}},
+                            "company": {
+                                "data": {"id": str(asset["company_id"]), "type": "company"}
+                            },
                         },
                     },
                     "included": [
@@ -116,7 +118,12 @@ def seed_document(
 @pytest.fixture
 def api_client() -> FakeApiClient:
     client = FakeApiClient()
-    client.assets[100] = {"id": 100, "company_id": 3, "parent_asset_id": None, "type": "Asset::Program"}
+    client.assets[100] = {
+        "id": 100,
+        "company_id": 3,
+        "parent_asset_id": None,
+        "type": "Asset::Program",
+    }
     client.assets[10] = {"id": 10, "company_id": 3, "parent_asset_id": 100, "type": "Asset::Rig"}
     client.assets[1] = {"id": 1, "company_id": 3, "parent_asset_id": 10, "type": "Asset::Well"}
     return client
@@ -261,7 +268,9 @@ def test_patch_settings_creates_scope_document_and_merges_effective_value(
     assert asset_documents[0]["data"]["settings"]["nested"]["threshold"] == 25
 
 
-def test_delete_keys_reverts_to_inherited_value(service: SettingsService, api_client: FakeApiClient) -> None:
+def test_delete_keys_reverts_to_inherited_value(
+    service: SettingsService, api_client: FakeApiClient
+) -> None:
     seed_document(
         api_client,
         app_key="corva.dysfunction_detection",
@@ -311,11 +320,7 @@ def test_replace_settings_appends_full_prior_snapshot_to_history(
     )
 
     latest_company_document = max(
-        (
-            doc
-            for doc in api_client.documents
-            if doc["company_id"] == 3 and doc["asset_id"] is None
-        ),
+        (doc for doc in api_client.documents if doc["company_id"] == 3 and doc["asset_id"] is None),
         key=lambda item: item["timestamp"],
     )
     assert latest_company_document["data"]["history"] == [

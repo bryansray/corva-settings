@@ -1,10 +1,10 @@
 from __future__ import annotations
-from typing import Any
 
 import os
-from pathlib import Path
 import sys
+from pathlib import Path
 from time import time
+from typing import Any
 from urllib.parse import urlparse
 from uuid import uuid4
 
@@ -14,7 +14,6 @@ from corva.api import Api
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from corva_settings import SettingsService
-
 
 pytestmark = [
     pytest.mark.integration,
@@ -95,9 +94,7 @@ def _fetch_latest_scope_document(
         limit=1,
         skip=0,
     )
-    assert results, (
-        "Expected a settings document to be readable from the target dataset."
-    )
+    assert results, "Expected a settings document to be readable from the target dataset."
     document = results[0]
     assert isinstance(document, dict)
     return document

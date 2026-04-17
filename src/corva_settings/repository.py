@@ -1,8 +1,9 @@
 from __future__ import annotations
-import requests
 
 from collections.abc import Sequence
 from typing import Any, Protocol
+
+import requests
 
 from corva_settings.models import SettingsDocument, SettingsScope
 
@@ -62,7 +63,5 @@ class CorvaDatasetRepository:
         return SettingsDocument.from_dict(document)
 
     def save_document(self, document: SettingsDocument) -> SettingsDocument:
-        response = self.api_client.insert_data(
-            self.provider, self.dataset, [document.to_dict()]
-        )
+        self.api_client.insert_data(self.provider, self.dataset, [document.to_dict()])
         return document

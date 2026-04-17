@@ -69,14 +69,10 @@ class CorvaResourceResolver:
                 attributes.get("company_id"), resolved_company_id
             )
             resolved_company_id = self._coalesce_int(
-                self._find_included_attribute(
-                    included, resource_type="company", attribute="id"
-                ),
+                self._find_included_attribute(included, resource_type="company", attribute="id"),
                 resolved_company_id,
             )
-            current_asset_id = self._coalesce_int(
-                attributes.get("parent_asset_id"), None
-            )
+            current_asset_id = self._coalesce_int(attributes.get("parent_asset_id"), None)
 
         lineage.reverse()
         return resolved_company_id, lineage

@@ -6,8 +6,13 @@ from time import time
 from typing import Any
 
 from corva_settings.merge import apply_patch, deep_merge, delete_paths
-from corva_settings.models import ScopeContext, SettingsDocument, SettingsHistoryEntry, SettingsScope
-from corva_settings.repository import CorvaDatasetRepository, CorvaDatasetClientProtocol
+from corva_settings.models import (
+    ScopeContext,
+    SettingsDocument,
+    SettingsHistoryEntry,
+    SettingsScope,
+)
+from corva_settings.repository import CorvaDatasetClientProtocol, CorvaDatasetRepository
 from corva_settings.resolver import CorvaResourceClientProtocol, CorvaResourceResolver
 
 
@@ -214,9 +219,13 @@ class SettingsService:
         """Build the ordered list of persisted scopes used during read resolution."""
         chain: list[SettingsScope] = []
         if context.company_id is not None:
-            chain.append(SettingsScope(app_key=app_key, company_id=context.company_id, asset_id=None))
+            chain.append(
+                SettingsScope(app_key=app_key, company_id=context.company_id, asset_id=None)
+            )
         for asset_id in context.asset_ids:
-            chain.append(SettingsScope(app_key=app_key, company_id=context.company_id, asset_id=asset_id))
+            chain.append(
+                SettingsScope(app_key=app_key, company_id=context.company_id, asset_id=asset_id)
+            )
         return chain
 
     def _build_next_document(
