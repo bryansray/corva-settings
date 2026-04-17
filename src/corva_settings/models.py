@@ -126,3 +126,19 @@ class ScopeContext:
         if not self.asset_ids:
             return None
         return self.asset_ids[-1]
+
+
+@dataclass(frozen=True, slots=True)
+class SettingsExplainLayer:
+    source: str
+    settings: dict[str, Any]
+    scope: SettingsScope | None = None
+    version: int | None = None
+    timestamp: int | None = None
+    deleted: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class SettingsExplanation:
+    effective_settings: dict[str, Any]
+    layers: tuple[SettingsExplainLayer, ...]

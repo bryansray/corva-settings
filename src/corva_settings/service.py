@@ -9,6 +9,8 @@ from corva_settings.merge import apply_patch, deep_merge, delete_paths
 from corva_settings.models import (
     ScopeContext,
     SettingsDocument,
+    SettingsExplainLayer,
+    SettingsExplanation,
     SettingsScope,
 )
 from corva_settings.repository import CorvaDatasetClientProtocol, CorvaDatasetRepository
@@ -50,6 +52,17 @@ class SettingsService:
         """Return the effective settings for the requested scope."""
         context = self._resolve_context(company_id=company_id, asset_id=asset_id)
         return self._resolve_effective_settings(app_key, context)
+
+    def explain_settings(
+        self,
+        app_key: str,
+        *,
+        company_id: int | None = None,
+        asset_id: int | None = None,
+    ) -> SettingsExplanation:
+        """Return the effective settings plus the contributing layers in precedence order."""
+        context = self._resolve_context(company_id=company_id, asset_id=asset_id)
+        return self._build_settings_explanation(app_key, context)
 
     def replace_settings(
         self,
@@ -224,13 +237,44 @@ class SettingsService:
 
     def _resolve_effective_settings(self, app_key: str, context: ScopeContext) -> dict[str, Any]:
         """Merge package defaults with stored scope documents in precedence order."""
+        return self._build_settings_explanation(app_key, context).effective_settings
+
+    def _build_settings_explanation(
+        self, app_key: str, context: ScopeContext
+    ) -> SettingsExplanation:
+        """Build the merged settings result and the layers that contributed to it."""
         merged = deepcopy(self.package_defaults.get(app_key, {}))
+        layers: list[SettingsExplainLayer] = []
+
+        if merged:
+            layers.append(
+                SettingsExplainLayer(
+                    source="package_defaults",
+                    scope=None,
+                    settings=deepcopy(merged),
+                )
+            )
+
         for scope in self._resolution_chain(app_key, context):
-            document = self.repository.fetch_document(scope)
-            if document is None:
+            document = self.repository.fetch_latest_document(scope)
+            if document is None or document.deleted:
                 continue
             merged = deep_merge(merged, document.settings)
-        return merged
+            layers.append(
+                SettingsExplainLayer(
+                    source="dataset",
+                    scope=document.scope,
+                    version=document.version,
+                    timestamp=document.timestamp,
+                    deleted=document.deleted,
+                    settings=document.settings,
+                )
+            )
+
+        return SettingsExplanation(
+            effective_settings=merged,
+            layers=tuple(layers),
+        )
 
     def _resolve_context(
         self,

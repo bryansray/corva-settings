@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from corva_settings import SettingsScope, SettingsService
+from corva_settings import SettingsExplainLayer, SettingsScope, SettingsService
 from corva_settings.service import SettingsApiClientProtocol
 
 
@@ -205,6 +205,108 @@ def test_get_settings_merges_package_company_and_asset_ancestry(
         "rig_only": True,
         "asset_only": True,
     }
+
+
+def test_explain_settings_returns_effective_settings_and_layers(
+    service: SettingsService, api_client: FakeApiClient
+) -> None:
+    seed_document(
+        api_client,
+        app_key="corva.dysfunction_detection",
+        company_id=3,
+        asset_id=None,
+        settings={"nested": {"shared": "company"}, "company_only": True},
+        updated_at=20,
+        version=2,
+    )
+    seed_document(
+        api_client,
+        app_key="corva.dysfunction_detection",
+        company_id=3,
+        asset_id=10,
+        settings={"nested": {"rig_only": True}, "rig_only": True},
+        updated_at=40,
+        version=4,
+    )
+    seed_document(
+        api_client,
+        app_key="corva.dysfunction_detection",
+        company_id=3,
+        asset_id=1,
+        settings={"a": "asset", "asset_only": True},
+        updated_at=50,
+        version=5,
+    )
+    seed_document(
+        api_client,
+        app_key="corva.dysfunction_detection",
+        company_id=3,
+        asset_id=100,
+        settings={"ignored": True},
+        updated_at=45,
+        version=3,
+        deleted=True,
+    )
+
+    explanation = service.explain_settings("corva.dysfunction_detection", asset_id=1)
+
+    assert explanation.effective_settings == {
+        "a": "asset",
+        "nested": {
+            "package_only": True,
+            "shared": "company",
+            "rig_only": True,
+        },
+        "company_only": True,
+        "rig_only": True,
+        "asset_only": True,
+    }
+    assert explanation.layers == (
+        SettingsExplainLayer(
+            source="package_defaults",
+            scope=None,
+            settings={
+                "a": "package",
+                "nested": {"package_only": True, "shared": "package"},
+            },
+        ),
+        SettingsExplainLayer(
+            source="dataset",
+            scope=SettingsScope(
+                app_key="corva.dysfunction_detection",
+                company_id=3,
+                asset_id=None,
+            ),
+            version=2,
+            timestamp=20,
+            deleted=False,
+            settings={"nested": {"shared": "company"}, "company_only": True},
+        ),
+        SettingsExplainLayer(
+            source="dataset",
+            scope=SettingsScope(
+                app_key="corva.dysfunction_detection",
+                company_id=3,
+                asset_id=10,
+            ),
+            version=4,
+            timestamp=40,
+            deleted=False,
+            settings={"nested": {"rig_only": True}, "rig_only": True},
+        ),
+        SettingsExplainLayer(
+            source="dataset",
+            scope=SettingsScope(
+                app_key="corva.dysfunction_detection",
+                company_id=3,
+                asset_id=1,
+            ),
+            version=5,
+            timestamp=50,
+            deleted=False,
+            settings={"a": "asset", "asset_only": True},
+        ),
+    )
 
 
 def test_get_settings_resolves_all_ancestor_assets_for_requested_asset(

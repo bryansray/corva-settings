@@ -107,11 +107,17 @@ rolled_back = service.rollback_settings(
     updated_by="user@corva.ai",
     asset_id=123,
 )
+
+explanation = service.explain_settings(
+    "corva.dysfunction_detection",
+    asset_id=123,
+)
 ```
 
 Supported read and inspection operations:
 
 - `get_settings`
+- `explain_settings`
 - `list_scopes`
 - `list_versions`
 
@@ -137,6 +143,7 @@ Operation semantics:
 - `list_scopes` returns the non-deleted scopes present in the applicable resolution chain
 - `list_versions` returns stored versions for one concrete scope, newest first
 - `rollback_settings` appends a new latest version by copying the settings from an older version
+- `explain_settings` returns the effective settings plus the contributing package-default and dataset layers in precedence order
 
 ## Expected API client surface
 
