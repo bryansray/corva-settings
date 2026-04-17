@@ -66,6 +66,13 @@ def _test_company_id() -> int:
     return int(os.getenv("CORVA_SETTINGS_TEST_COMPANY_ID", "1"))
 
 
+def _test_asset_id() -> int:
+    value = os.getenv("CORVA_SETTINGS_TEST_ASSET_ID")
+    if not value:
+        pytest.skip("Set CORVA_SETTINGS_TEST_ASSET_ID to run asset-scoped integration tests.")
+    return int(value)
+
+
 def _test_dataset() -> str:
     return os.getenv("CORVA_SETTINGS_TEST_DATASET", "app.settings")
 
@@ -332,6 +339,85 @@ def test_get_settings_reads_company_scoped_default_settings() -> None:
     assert document["asset_id"] is None
     assert document["data"]["deleted"] is False
     assert document["version"] == 1
+
+
+def test_explain_settings_reports_company_and_asset_layers() -> None:
+    api = _build_api()
+    provider = _test_provider()
+    dataset = _test_dataset()
+    company_id = _test_company_id()
+    asset_id = _test_asset_id()
+    unique_app_key = f"corva-settings.integration.{uuid4()}"
+    updated_by = "corva-settings-integration-test"
+    company_timestamp = int(time())
+    asset_timestamp = company_timestamp + 1
+
+    service = SettingsService(
+        cast(SettingsApiClientProtocol, api),
+        provider=provider,
+        dataset=dataset,
+        package_defaults={unique_app_key: {"default_only": True}},
+        clock=lambda: company_timestamp,
+    )
+
+    company_settings = {
+        "shared": {"source": "company"},
+        "company_only": True,
+    }
+    asset_settings = {
+        "shared": {"source": "asset"},
+        "asset_only": True,
+    }
+
+    service.replace_settings(
+        unique_app_key,
+        company_settings,
+        updated_by=updated_by,
+        company_id=company_id,
+    )
+
+    service.clock = lambda: asset_timestamp
+    service.replace_settings(
+        unique_app_key,
+        asset_settings,
+        updated_by=updated_by,
+        asset_id=asset_id,
+    )
+
+    explanation = service.explain_settings(unique_app_key, asset_id=asset_id)
+
+    assert explanation.effective_settings == {
+        "default_only": True,
+        "shared": {"source": "asset"},
+        "company_only": True,
+        "asset_only": True,
+    }
+    assert len(explanation.layers) == 3
+
+    package_layer, company_layer, asset_layer = explanation.layers
+    assert package_layer.source == "package_defaults"
+    assert package_layer.scope is None
+    assert package_layer.version is None
+    assert package_layer.timestamp is None
+    assert package_layer.settings == {"default_only": True}
+
+    assert company_layer.source == "dataset"
+    assert company_layer.scope is not None
+    assert company_layer.scope.app_key == unique_app_key
+    assert company_layer.scope.company_id == company_id
+    assert company_layer.scope.asset_id is None
+    assert company_layer.version == 1
+    assert company_layer.timestamp == company_timestamp
+    assert company_layer.settings == company_settings
+
+    assert asset_layer.source == "dataset"
+    assert asset_layer.scope is not None
+    assert asset_layer.scope.app_key == unique_app_key
+    assert asset_layer.scope.company_id == company_id
+    assert asset_layer.scope.asset_id == asset_id
+    assert asset_layer.version == 1
+    assert asset_layer.timestamp == asset_timestamp
+    assert asset_layer.settings == asset_settings
 
 
 def test_clear_settings_persists_empty_active_scope_document() -> None:

@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
+import requests
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -89,6 +90,35 @@ class FakeApiClient:
         raise KeyError(f"Unhandled GET path: {path}")
 
 
+class NotFoundDatasetApiClient(FakeApiClient):
+    def get_dataset(
+        self,
+        provider: str,
+        dataset: str,
+        *,
+        query: dict[str, Any],
+        sort: dict[str, int],
+        limit: int,
+        skip: int = 0,
+        fields: str | None = None,
+    ) -> list[dict[str, Any]]:
+        matching = super().get_dataset(
+            provider,
+            dataset,
+            query=query,
+            sort=sort,
+            limit=limit,
+            skip=skip,
+            fields=fields,
+        )
+        if matching:
+            return matching
+
+        response = requests.Response()
+        response.status_code = 404
+        raise requests.HTTPError("Not Found", response=response)
+
+
 def seed_document(
     api_client: FakeApiClient,
     *,
@@ -152,6 +182,15 @@ def test_service_defaults_dataset_to_app_settings(api_client: FakeApiClient) -> 
     service = SettingsService(cast(SettingsApiClientProtocol, api_client))
 
     assert service.repository.dataset == "app.settings"
+
+
+def test_get_settings_treats_dataset_404_as_missing_scope_document() -> None:
+    api_client = NotFoundDatasetApiClient()
+    service = SettingsService(cast(SettingsApiClientProtocol, api_client))
+
+    settings = service.get_settings("corva.dysfunction_detection", company_id=3)
+
+    assert settings == {}
 
 
 def test_get_settings_merges_package_company_and_asset_ancestry(

@@ -46,13 +46,10 @@ class CorvaDatasetRepository:
         return document
 
     def fetch_latest_document(self, scope: SettingsScope) -> SettingsDocument | None:
-        results = self.api_client.get_dataset(
-            provider=self.provider,
-            dataset=self.dataset,
+        results = self._get_dataset(
             query=scope.to_query(),
             sort={"version": -1, "timestamp": -1},
             limit=1,
-            skip=0,
         )
         if not results:
             return None
@@ -63,13 +60,10 @@ class CorvaDatasetRepository:
         return SettingsDocument.from_dict(document)
 
     def fetch_document_version(self, scope: SettingsScope, version: int) -> SettingsDocument | None:
-        results = self.api_client.get_dataset(
-            provider=self.provider,
-            dataset=self.dataset,
+        results = self._get_dataset(
             query={**scope.to_query(), "version": version},
             sort={"version": -1, "timestamp": -1},
             limit=1,
-            skip=0,
         )
         if not results:
             return None
@@ -86,13 +80,10 @@ class CorvaDatasetRepository:
         limit: int = 100,
         include_deleted: bool = True,
     ) -> list[SettingsDocument]:
-        results = self.api_client.get_dataset(
-            provider=self.provider,
-            dataset=self.dataset,
+        results = self._get_dataset(
             query=scope.to_query(),
             sort={"version": -1, "timestamp": -1},
             limit=limit,
-            skip=0,
         )
         documents = []
         for document in results:
@@ -107,3 +98,25 @@ class CorvaDatasetRepository:
     def save_document(self, document: SettingsDocument) -> SettingsDocument:
         self.api_client.insert_data(self.provider, self.dataset, [document.to_dict()])
         return document
+
+    def _get_dataset(
+        self,
+        *,
+        query: dict[str, Any],
+        sort: dict[str, int],
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        try:
+            return self.api_client.get_dataset(
+                provider=self.provider,
+                dataset=self.dataset,
+                query=query,
+                sort=sort,
+                limit=limit,
+                skip=0,
+            )
+        except requests.HTTPError as exc:
+            response = exc.response
+            if response is not None and response.status_code == 404:
+                return []
+            raise
