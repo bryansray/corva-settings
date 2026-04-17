@@ -19,6 +19,9 @@ class SettingsApiClientProtocol(CorvaDatasetClientProtocol, CorvaResourceClientP
     """Combined protocol for the dataset and resource APIs required by SettingsService."""
 
 
+DEFAULT_SETTINGS_DATASET = "app.settings"
+
+
 class SettingsService:
     """Resolve and persist scoped settings documents."""
 
@@ -26,7 +29,7 @@ class SettingsService:
         self,
         api_client: SettingsApiClientProtocol,
         *,
-        dataset: str,
+        dataset: str = DEFAULT_SETTINGS_DATASET,
         provider: str = "corva",
         package_defaults: Mapping[str, Mapping[str, Any]] | None = None,
         clock: Callable[[], int] | None = None,

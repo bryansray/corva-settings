@@ -69,13 +69,15 @@ from corva_settings import SettingsService
 
 service = SettingsService(
     api_client,
-    dataset="app.settings",
     package_defaults={
         "corva.dysfunction_detection": {
             "alerts": {"enabled": True}
         }
     },
 )
+
+# Uses the default dataset name "app.settings".
+# Pass dataset="..." to override it.
 
 settings = service.get_settings("corva.dysfunction_detection", asset_id=123)
 

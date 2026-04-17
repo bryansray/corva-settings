@@ -138,7 +138,6 @@ def service(api_client: FakeApiClient) -> SettingsService:
     clock_values = iter([100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200])
     return SettingsService(
         cast(SettingsApiClientProtocol, api_client),
-        dataset="app.settings",
         package_defaults={
             "corva.dysfunction_detection": {
                 "a": "package",
@@ -147,6 +146,12 @@ def service(api_client: FakeApiClient) -> SettingsService:
         },
         clock=lambda: next(clock_values),
     )
+
+
+def test_service_defaults_dataset_to_app_settings(api_client: FakeApiClient) -> None:
+    service = SettingsService(cast(SettingsApiClientProtocol, api_client))
+
+    assert service.repository.dataset == "app.settings"
 
 
 def test_get_settings_merges_package_company_and_asset_ancestry(
