@@ -4,7 +4,7 @@ import os
 import sys
 from pathlib import Path
 from time import time
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlparse
 from uuid import uuid4
 
@@ -14,6 +14,7 @@ from corva.api import Api
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from corva_settings import SettingsService
+from corva_settings.service import SettingsApiClientProtocol
 
 pytestmark = [
     pytest.mark.integration,
@@ -111,7 +112,7 @@ def test_replace_settings_persists_company_scoped_document_to_dataset() -> None:
     now = int(time())
 
     service = SettingsService(
-        api,
+        cast(SettingsApiClientProtocol, api),
         provider=provider,
         dataset=dataset,
         package_defaults={},
@@ -160,7 +161,7 @@ def test_get_settings_reads_company_scoped_default_settings() -> None:
     now = int(time())
 
     service = SettingsService(
-        api,
+        cast(SettingsApiClientProtocol, api),
         provider=provider,
         dataset=dataset,
         package_defaults={},
@@ -206,7 +207,7 @@ def test_clear_settings_persists_empty_active_scope_document() -> None:
     cleared_timestamp = initial_timestamp + 1
 
     service = SettingsService(
-        api,
+        cast(SettingsApiClientProtocol, api),
         provider=provider,
         dataset=dataset,
         package_defaults={unique_app_key: {"default_flag": True}},
@@ -266,7 +267,7 @@ def test_delete_scope_persists_tombstone_document() -> None:
     deleted_timestamp = initial_timestamp + 1
 
     service = SettingsService(
-        api,
+        cast(SettingsApiClientProtocol, api),
         provider=provider,
         dataset=dataset,
         package_defaults={unique_app_key: {"default_flag": True}},

@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from time import time
-from typing import Any
+from typing import Any, Protocol
 
 from corva_settings.merge import apply_patch, deep_merge, delete_paths
 from corva_settings.models import (
@@ -16,12 +16,18 @@ from corva_settings.repository import CorvaDatasetClientProtocol, CorvaDatasetRe
 from corva_settings.resolver import CorvaResourceClientProtocol, CorvaResourceResolver
 
 
+class SettingsApiClientProtocol(
+    CorvaDatasetClientProtocol, CorvaResourceClientProtocol, Protocol
+):
+    """Combined protocol for the dataset and resource APIs required by SettingsService."""
+
+
 class SettingsService:
     """Resolve and persist scoped settings documents."""
 
     def __init__(
         self,
-        api_client: CorvaDatasetClientProtocol & CorvaResourceClientProtocol,
+        api_client: SettingsApiClientProtocol,
         *,
         dataset: str,
         provider: str = "corva",

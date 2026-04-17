@@ -3,13 +3,14 @@ from __future__ import annotations
 import sys
 from copy import deepcopy
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from corva_settings import SettingsScope, SettingsService
+from corva_settings.service import SettingsApiClientProtocol
 
 
 class FakeResponse:
@@ -133,7 +134,7 @@ def api_client() -> FakeApiClient:
 def service(api_client: FakeApiClient) -> SettingsService:
     clock_values = iter([100, 200, 300, 400, 500, 600, 700, 800, 900, 1000])
     return SettingsService(
-        api_client,
+        cast(SettingsApiClientProtocol, api_client),
         dataset="app.settings",
         package_defaults={
             "corva.dysfunction_detection": {
