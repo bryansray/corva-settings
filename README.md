@@ -20,7 +20,12 @@ Persisted scopes are limited to:
 
 Unscoped dataset queries are invalid. Package defaults are the only global layer.
 
-For a more detailed walkthrough of inheritance across company, rig, and well scopes, see [docs/settings-hierarchy.md](docs/settings-hierarchy.md).
+## Documentation
+
+Additional guides:
+
+- [docs/settings-hierarchy.md](docs/settings-hierarchy.md): how inheritance works across company, rig, and well scopes
+- [docs/deleting-keys.md](docs/deleting-keys.md): how `delete_keys(...)` interacts with inheritance and append-only versioning
 
 ## Storage Model
 
