@@ -16,9 +16,7 @@ from corva_settings.repository import CorvaDatasetClientProtocol, CorvaDatasetRe
 from corva_settings.resolver import CorvaResourceClientProtocol, CorvaResourceResolver
 
 
-class SettingsApiClientProtocol(
-    CorvaDatasetClientProtocol, CorvaResourceClientProtocol, Protocol
-):
+class SettingsApiClientProtocol(CorvaDatasetClientProtocol, CorvaResourceClientProtocol, Protocol):
     """Combined protocol for the dataset and resource APIs required by SettingsService."""
 
 
