@@ -16,7 +16,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 from corva_settings import SettingsService
 
 
-pytestmark = pytest.mark.integration
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        os.getenv("RUN_CORVA_INTEGRATION_TESTS") != "1",
+        reason="Set RUN_CORVA_INTEGRATION_TESTS=1 to run live integration tests.",
+    ),
+]
 
 DEFAULT_API_URL = "https://api.qa.corva.ai"
 DEFAULT_DATA_API_URL = "https://data.qa.corva.ai"
