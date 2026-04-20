@@ -3,32 +3,31 @@ name = "corva-settings"
 version = "0.2.0"
 description = "Reusable Corva settings service with scoped resolution and history"
 readme = "README.md"
-requires-python = ">=3.13"
-dependencies = [
-    "corva-sdk>=2.1.1",
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
 ]
+dependencies = ["corva-sdk>=2.1.1"]
 
 [build-system]
 requires = ["setuptools>=69"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-package-dir = {"" = "src"}
+package-dir = { "" = "src" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [dependency-groups]
-dev = [
-    "pytest>=9.0.3",
-    "ruff>=0.12.0",
-    "ty>=0.0.31",
-]
+dev = ["pytest>=9.0.3", "ruff>=0.12.0", "ty>=0.0.31"]
 
 [tool.pytest.ini_options]
-markers = [
-    "integration: live tests that hit Corva APIs and datasets",
-]
+markers = ["integration: live tests that hit Corva APIs and datasets"]
 
 [tool.ruff]
 line-length = 100
@@ -37,5 +36,5 @@ line-length = 100
 select = ["E", "F", "I"]
 
 [tool.ty.environment]
-python-version = "3.13"
+python-version = "3.10"
 root = ["src", "."]
