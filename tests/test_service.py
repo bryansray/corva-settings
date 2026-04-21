@@ -219,7 +219,9 @@ def test_load_app_key_from_manifest_returns_fallback_when_manifest_missing(tmp_p
     )
 
 
-def test_load_app_key_from_manifest_does_not_hide_invalid_manifest_with_fallback(tmp_path: Path) -> None:
+def test_load_app_key_from_manifest_does_not_hide_invalid_manifest_with_fallback(
+    tmp_path: Path,
+) -> None:
     manifest = tmp_path / "manifest.json"
     manifest.write_text('{"application": {}}', encoding="utf-8")
 
@@ -230,7 +232,9 @@ def test_load_app_key_from_manifest_does_not_hide_invalid_manifest_with_fallback
         )
 
 
-def test_service_from_manifest_returns_service_and_app_key(api_client: FakeApiClient, tmp_path: Path) -> None:
+def test_service_from_manifest_returns_service_and_app_key(
+    api_client: FakeApiClient, tmp_path: Path
+) -> None:
     manifest = tmp_path / "manifest.json"
     manifest.write_text(
         '{"application": {"key": "corva.dysfunction_detection"}}',
