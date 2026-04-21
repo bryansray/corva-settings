@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
+from pathlib import Path
 from time import time
 from typing import Any, Protocol
 
+from corva_settings.manifest import load_app_key_from_manifest
 from corva_settings.merge import apply_patch, deep_merge, delete_paths
 from corva_settings.models import (
     ScopeContext,
@@ -41,6 +43,30 @@ class SettingsService:
         self.resource_resolver = CorvaResourceResolver(api_client)
         self.package_defaults = dict(package_defaults or {})
         self.clock = clock or (lambda: int(time()))
+
+    @classmethod
+    def from_manifest(
+        cls,
+        api_client: SettingsApiClientProtocol,
+        *,
+        manifest_path: str | Path = "manifest.json",
+        dataset: str = DEFAULT_SETTINGS_DATASET,
+        provider: str = "corva",
+        package_defaults: Mapping[str, Mapping[str, Any]] | None = None,
+        clock: Callable[[], int] | None = None,
+    ) -> tuple[SettingsService, str]:
+        """Build a service plus the default app key read from a Corva app manifest."""
+
+        return (
+            cls(
+                api_client,
+                dataset=dataset,
+                provider=provider,
+                package_defaults=package_defaults,
+                clock=clock,
+            ),
+            load_app_key_from_manifest(manifest_path),
+        )
 
     def get_settings(
         self,

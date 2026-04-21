@@ -10,7 +10,12 @@ import requests
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from corva_settings import SettingsExplainLayer, SettingsScope, SettingsService
+from corva_settings import (
+    SettingsExplainLayer,
+    SettingsScope,
+    SettingsService,
+    load_app_key_from_manifest,
+)
 from corva_settings.service import SettingsApiClientProtocol
 
 
@@ -182,6 +187,64 @@ def test_service_defaults_dataset_to_app_settings(api_client: FakeApiClient) -> 
     service = SettingsService(cast(SettingsApiClientProtocol, api_client))
 
     assert service.repository.dataset == "app.settings"
+
+
+def test_load_app_key_from_manifest(tmp_path: Path) -> None:
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(
+        '{"application": {"key": "corva.dysfunction_detection"}}',
+        encoding="utf-8",
+    )
+
+    assert load_app_key_from_manifest(manifest) == "corva.dysfunction_detection"
+
+
+def test_load_app_key_from_manifest_raises_when_key_missing(tmp_path: Path) -> None:
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text('{"application": {}}', encoding="utf-8")
+
+    with pytest.raises(ValueError, match="application.key"):
+        load_app_key_from_manifest(manifest)
+
+
+def test_load_app_key_from_manifest_returns_fallback_when_manifest_missing(tmp_path: Path) -> None:
+    manifest = tmp_path / "manifest.json"
+
+    assert (
+        load_app_key_from_manifest(
+            manifest,
+            fallback_app_key="corva.dysfunction_detection",
+        )
+        == "corva.dysfunction_detection"
+    )
+
+
+def test_load_app_key_from_manifest_does_not_hide_invalid_manifest_with_fallback(tmp_path: Path) -> None:
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text('{"application": {}}', encoding="utf-8")
+
+    with pytest.raises(ValueError, match="application.key"):
+        load_app_key_from_manifest(
+            manifest,
+            fallback_app_key="corva.dysfunction_detection",
+        )
+
+
+def test_service_from_manifest_returns_service_and_app_key(api_client: FakeApiClient, tmp_path: Path) -> None:
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(
+        '{"application": {"key": "corva.dysfunction_detection"}}',
+        encoding="utf-8",
+    )
+
+    service, app_key = SettingsService.from_manifest(
+        cast(SettingsApiClientProtocol, api_client),
+        manifest_path=manifest,
+    )
+
+    assert isinstance(service, SettingsService)
+    assert service.repository.dataset == "app.settings"
+    assert app_key == "corva.dysfunction_detection"
 
 
 def test_get_settings_treats_dataset_404_as_missing_scope_document() -> None:

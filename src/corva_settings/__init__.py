@@ -1,3 +1,4 @@
+from corva_settings.manifest import load_app_key_from_manifest
 from corva_settings.models import (
     ScopeContext,
     SettingsDocument,
@@ -18,4 +19,5 @@ __all__ = [
     "SettingsExplanation",
     "SettingsScope",
     "SettingsService",
+    "load_app_key_from_manifest",
 ]
