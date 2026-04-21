@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/bryansray/corva-settings/compare/corva-settings-v0.2.0...corva-settings-v0.3.0) (2026-04-21)
+
+
+### Features
+
+* load app key from manifest ([8d4d3e4](https://github.com/bryansray/corva-settings/commit/8d4d3e4ebc65ef92b51786cb88f4302d510175e1))
+
 ## [0.2.0](https://github.com/bryansray/corva-settings/compare/corva-settings-v0.1.0...corva-settings-v0.2.0) (2026-04-17)
 
 
