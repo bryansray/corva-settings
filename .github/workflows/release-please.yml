@@ -23,6 +23,7 @@ jobs:
         with:
           client-id: ${{ vars.RELEASE_PLEASE_CLIENT_ID }}
           private-key: ${{ secrets.RELEASE_PLEASE_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
 
       - name: Run release-please
         id: release
