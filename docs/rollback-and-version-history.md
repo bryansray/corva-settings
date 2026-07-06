@@ -9,6 +9,7 @@ Every write to a scope appends a new document version for that exact scope.
 A scope is identified by:
 
 - `app_key`
+- `scope_type`
 - `company_id`
 - `asset_id`
 
@@ -33,6 +34,7 @@ Older documents remain in the dataset as immutable history.
 Example scope:
 
 - `app_key = "corva.dysfunction_detection"`
+- `scope_type = "asset"`
 - `company_id = 1`
 - `asset_id = 49407322`
 
@@ -41,6 +43,7 @@ Version 1:
 ```json
 {
   "app_key": "corva.dysfunction_detection",
+  "scope_type": "asset",
   "company_id": 1,
   "asset_id": 49407322,
   "version": 1,
@@ -64,6 +67,7 @@ Version 2 after a threshold update:
 ```json
 {
   "app_key": "corva.dysfunction_detection",
+  "scope_type": "asset",
   "company_id": 1,
   "asset_id": 49407322,
   "version": 2,

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
+
+ScopeType = Literal["global", "company", "asset"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -9,15 +11,34 @@ class SettingsScope:
     app_key: str
     company_id: int | None = None
     asset_id: int | None = None
+    scope_type: ScopeType | None = None
+
+    def __post_init__(self) -> None:
+        inferred_scope_type = self._infer_scope_type()
+        if self.scope_type is None:
+            object.__setattr__(self, "scope_type", inferred_scope_type)
+            return
+        if self.scope_type != inferred_scope_type:
+            raise ValueError(
+                f"scope_type={self.scope_type!r} is inconsistent with company_id and asset_id"
+            )
 
     def to_query(self) -> dict[str, Any]:
-        if self.company_id is None and self.asset_id is None:
-            raise ValueError("settings queries must target a company or asset scope")
         return {
             "app_key": self.app_key,
+            "scope_type": self.scope_type,
             "company_id": self.company_id,
             "asset_id": self.asset_id,
         }
+
+    def _infer_scope_type(self) -> ScopeType:
+        if self.asset_id is not None:
+            if self.company_id is None:
+                raise ValueError("asset settings scopes must include company_id")
+            return "asset"
+        if self.company_id is not None:
+            return "company"
+        return "global"
 
 
 @dataclass(slots=True)
@@ -29,6 +50,7 @@ class SettingsDocument:
     asset_id: int | None = None
     _id: str | None = None
     version: int = 1
+    scope_type: ScopeType | None = None
 
     @property
     def settings(self) -> dict[str, Any]:
@@ -52,12 +74,14 @@ class SettingsDocument:
             app_key=self.app_key,
             company_id=self.company_id,
             asset_id=self.asset_id,
+            scope_type=self.scope_type,
         )
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "_id": self._id or "",
             "app_key": self.app_key,
+            "scope_type": self.scope.scope_type,
             "company_id": self.company_id,
             "asset_id": self.asset_id,
             "version": self.version,
@@ -76,6 +100,7 @@ class SettingsDocument:
         return cls(
             _id=payload.get("_id"),
             app_key=str(payload["app_key"]),
+            scope_type=payload.get("scope_type"),
             company_id=payload.get("company_id"),
             asset_id=payload.get("asset_id"),
             data={
@@ -103,6 +128,7 @@ class SettingsDocument:
         return cls(
             _id=_id,
             app_key=scope.app_key,
+            scope_type=scope.scope_type,
             company_id=scope.company_id,
             asset_id=scope.asset_id,
             timestamp=updated_at,

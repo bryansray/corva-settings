@@ -1,6 +1,7 @@
 from corva_settings.manifest import load_app_key_from_manifest
 from corva_settings.models import (
     ScopeContext,
+    ScopeType,
     SettingsDocument,
     SettingsExplainLayer,
     SettingsExplanation,
@@ -14,6 +15,7 @@ __all__ = [
     "CorvaDatasetRepository",
     "CorvaResourceResolver",
     "ScopeContext",
+    "ScopeType",
     "SettingsDocument",
     "SettingsExplainLayer",
     "SettingsExplanation",

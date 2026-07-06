@@ -15,10 +15,12 @@ For asset reads, the service resolves the asset's `company_id` and ancestor asse
 
 Persisted scopes are limited to:
 
-- company scope: `company_id=<id>, asset_id=None`
-- asset scope: `company_id=<id>, asset_id=<id>`
+- company scope: `scope_type="company", company_id=<id>, asset_id=None`
+- asset scope: `scope_type="asset", company_id=<id>, asset_id=<id>`
 
-Unscoped dataset queries are invalid. Package defaults are the only global layer.
+The storage model also reserves `scope_type="global", company_id=None, asset_id=None`
+for app-level persisted defaults. Public read/write APIs for that layer are not enabled yet.
+Package defaults are currently the only global layer used during resolution.
 
 ## Documentation
 
@@ -35,15 +37,16 @@ Each write appends a new document version for one scope. The latest version is t
 This library assumes the dataset can store multiple documents for the same:
 
 - `app_key`
+- `scope_type`
 - `company_id`
 - `asset_id`
 
-In practice, the dataset index must support append-only versions per scope. A scope-only unique index on `app_key + company_id + asset_id` is not compatible with this model.
+In practice, the dataset index must support append-only versions per scope. A scope-only unique index on `app_key + scope_type + company_id + asset_id` is not compatible with this model.
 
 Recommended index strategy:
 
-- required unique index: `app_key + company_id + asset_id + version`
-- optional read-optimized index: `app_key + company_id + asset_id + version desc`
+- required unique index: `app_key + scope_type + company_id + asset_id + version`
+- optional read-optimized index: `app_key + scope_type + company_id + asset_id + version desc`
 
 The required unique index guarantees that each scope/version pair is unique while still allowing multiple versions for the same scope. The optional descending read index improves “latest version for scope” queries if the collection becomes hot.
 
@@ -53,6 +56,7 @@ The required unique index guarantees that each scope/version pair is unique whil
 {
   "_id": "",
   "app_key": "corva.dysfunction_detection",
+  "scope_type": "asset",
   "asset_id": 1,
   "company_id": 3,
   "version": 1,

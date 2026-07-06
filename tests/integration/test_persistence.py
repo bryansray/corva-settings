@@ -90,11 +90,13 @@ def _fetch_latest_scope_document(
     company_id: int,
     asset_id: int | None = None,
 ) -> dict[str, Any]:
+    scope_type = "asset" if asset_id is not None else "company"
     results = api.get_dataset(
         provider,
         dataset,
         query={
             "app_key": app_key,
+            "scope_type": scope_type,
             "company_id": company_id,
             "asset_id": asset_id,
         },
@@ -118,11 +120,13 @@ def _fetch_scope_documents(
     asset_id: int | None = None,
     limit: int = 10,
 ) -> list[dict[str, Any]]:
+    scope_type = "asset" if asset_id is not None else "company"
     results = api.get_dataset(
         provider,
         dataset,
         query={
             "app_key": app_key,
+            "scope_type": scope_type,
             "company_id": company_id,
             "asset_id": asset_id,
         },
@@ -174,6 +178,7 @@ def test_replace_settings_persists_company_scoped_document_to_dataset() -> None:
         company_id=company_id,
     )
     assert document["app_key"] == unique_app_key
+    assert document["scope_type"] == "company"
     assert document["company_id"] == company_id
     assert document["asset_id"] is None
     assert document["timestamp"] == now
@@ -222,6 +227,7 @@ def test_replace_settings_uses_default_app_settings_dataset() -> None:
         company_id=company_id,
     )
     assert document["app_key"] == unique_app_key
+    assert document["scope_type"] == "company"
     assert document["company_id"] == company_id
     assert document["asset_id"] is None
     assert document["timestamp"] == now

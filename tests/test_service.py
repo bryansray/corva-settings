@@ -136,10 +136,14 @@ def seed_document(
     version: int = 1,
     deleted: bool = False,
 ) -> None:
+    scope_type = (
+        "asset" if asset_id is not None else "company" if company_id is not None else "global"
+    )
     api_client.documents.append(
         {
             "_id": f"seed-{len(api_client.documents) + 1}",
             "app_key": app_key,
+            "scope_type": scope_type,
             "company_id": company_id,
             "asset_id": asset_id,
             "version": version,
@@ -187,6 +191,20 @@ def test_service_defaults_dataset_to_app_settings(api_client: FakeApiClient) -> 
     service = SettingsService(cast(SettingsApiClientProtocol, api_client))
 
     assert service.repository.dataset == "app.settings"
+
+
+def test_settings_scope_derives_scope_type() -> None:
+    assert SettingsScope("corva.dysfunction_detection").scope_type == "global"
+    assert SettingsScope("corva.dysfunction_detection", company_id=3).scope_type == "company"
+    assert (
+        SettingsScope("corva.dysfunction_detection", company_id=3, asset_id=1).scope_type
+        == "asset"
+    )
+
+
+def test_settings_scope_rejects_inconsistent_scope_type() -> None:
+    with pytest.raises(ValueError, match="inconsistent"):
+        SettingsScope("corva.dysfunction_detection", company_id=3, scope_type="global")
 
 
 def test_load_app_key_from_manifest(tmp_path: Path) -> None:
@@ -482,6 +500,7 @@ def test_patch_settings_creates_scope_document_and_merges_effective_value(
 
     asset_documents = [doc for doc in api_client.documents if doc["asset_id"] == 1]
     assert len(asset_documents) == 1
+    assert asset_documents[0]["scope_type"] == "asset"
     assert asset_documents[0]["data"]["settings"]["nested"]["threshold"] == 25
 
 
@@ -540,6 +559,7 @@ def test_replace_settings_appends_new_scope_version(
         (doc for doc in api_client.documents if doc["company_id"] == 3 and doc["asset_id"] is None),
         key=lambda item: item["timestamp"],
     )
+    assert latest_company_document["scope_type"] == "company"
     assert latest_company_document["version"] == 2
     previous_company_document = min(
         (doc for doc in api_client.documents if doc["company_id"] == 3 and doc["asset_id"] is None),

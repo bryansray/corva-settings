@@ -2,6 +2,11 @@
 
 This document explains how settings are resolved across company and asset scopes.
 
+Persisted documents include an explicit `scope_type` field. Company documents use
+`scope_type="company"` and asset documents use `scope_type="asset"`. The storage
+model also reserves `scope_type="global"` for app-level defaults, but that layer is
+not part of the public resolution API yet.
+
 ## Resolution Order
 
 When you request settings for a scope, the service merges settings in this order:
