@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.0](https://github.com/bryansray/corva-settings/compare/corva-settings-v0.3.0...corva-settings-v0.4.0) (2026-07-06)
+
+
+### Features
+
+* add explicit settings scope type ([3bbe170](https://github.com/bryansray/corva-settings/commit/3bbe170c3a27d1af6158abf4c62d574e78918937))
+* support global app default settings ([b898a9f](https://github.com/bryansray/corva-settings/commit/b898a9f199cdafeb3d392667ebf3228c44c330e1))
+
 ## [0.3.0](https://github.com/bryansray/corva-settings/compare/corva-settings-v0.2.0...corva-settings-v0.3.0) (2026-04-21)
 
 
