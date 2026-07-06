@@ -7,20 +7,20 @@
 Reads resolve in this order:
 
 1. Package defaults passed into the service as a Python dict
-2. Company settings
-3. Ancestor asset settings from highest parent to lowest parent
-4. Requested asset settings
+2. Persisted global app defaults
+3. Company settings
+4. Ancestor asset settings from highest parent to lowest parent
+5. Requested asset settings
 
 For asset reads, the service resolves the asset's `company_id` and ancestor asset chain through the injected API client by following `parent_asset_id`.
 
 Persisted scopes are limited to:
 
+- global app scope: `scope_type="global", company_id=None, asset_id=None`
 - company scope: `scope_type="company", company_id=<id>, asset_id=None`
 - asset scope: `scope_type="asset", company_id=<id>, asset_id=<id>`
 
-The storage model also reserves `scope_type="global", company_id=None, asset_id=None`
-for app-level persisted defaults. Public read/write APIs for that layer are not enabled yet.
-Package defaults are currently the only global layer used during resolution.
+The global app scope stores app-level defaults that apply before company and asset overrides.
 
 ## Documentation
 
@@ -93,6 +93,12 @@ service = SettingsService(
 
 settings = service.get_settings("corva.dysfunction_detection", asset_id=123)
 
+global_defaults = service.replace_global_settings(
+    "corva.dysfunction_detection",
+    {"alerts": {"enabled": True, "threshold": 10}},
+    updated_by="user@corva.ai",
+)
+
 updated = service.patch_settings(
     "corva.dysfunction_detection",
     {"alerts.threshold": 12},
@@ -113,6 +119,8 @@ versions = service.list_versions(
     asset_id=123,
 )
 
+global_versions = service.list_global_versions("corva.dysfunction_detection")
+
 rolled_back = service.rollback_settings(
     "corva.dysfunction_detection",
     version=2,
@@ -132,29 +140,40 @@ Supported read and inspection operations:
 - `explain_settings`
 - `list_scopes`
 - `list_versions`
+- `list_global_versions`
 
 Supported write operations:
 
 - `replace_settings`
+- `replace_global_settings`
 - `patch_settings`
+- `patch_global_settings`
 - `delete_keys`
+- `delete_global_keys`
 - `clear_settings`
+- `clear_global_settings`
 - `delete_scope`
+- `delete_global_scope`
 - `rollback_settings`
+- `rollback_global_settings`
 
 Writes are scoped to either:
 
+- global app defaults through explicit `*_global_*` methods
 - `company_id`
 - `company_id + asset_id`
 
 Operation semantics:
 
 - `patch_settings` and `delete_keys` use dotted paths such as `alerts.threshold`
+- `patch_global_settings` and `delete_global_keys` use the same dotted-path behavior for app-level defaults
 - `clear_settings` writes an empty active document for the target scope
 - `delete_scope` writes a logical delete tombstone for the target scope
 - `list_scopes` returns the non-deleted scopes present in the applicable resolution chain
 - `list_versions` returns stored versions for one concrete scope, newest first
+- `list_global_versions` returns stored global app default versions, newest first
 - `rollback_settings` appends a new latest version by copying the settings from an older version
+- `rollback_global_settings` does the same for app-level defaults
 - `explain_settings` returns the effective settings plus the contributing package-default and dataset layers in precedence order
 
 ## Expected API client surface

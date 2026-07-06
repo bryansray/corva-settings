@@ -278,9 +278,38 @@ def test_get_settings_treats_dataset_404_as_missing_scope_document() -> None:
     assert settings == {}
 
 
+def test_get_settings_reads_persisted_global_defaults(
+    service: SettingsService, api_client: FakeApiClient
+) -> None:
+    seed_document(
+        api_client,
+        app_key="corva.dysfunction_detection",
+        company_id=None,
+        asset_id=None,
+        settings={"a": "global", "global_only": True},
+        updated_at=10,
+    )
+
+    settings = service.get_settings("corva.dysfunction_detection")
+
+    assert settings == {
+        "a": "global",
+        "nested": {"package_only": True, "shared": "package"},
+        "global_only": True,
+    }
+
+
 def test_get_settings_merges_package_company_and_asset_ancestry(
     service: SettingsService, api_client: FakeApiClient
 ) -> None:
+    seed_document(
+        api_client,
+        app_key="corva.dysfunction_detection",
+        company_id=None,
+        asset_id=None,
+        settings={"nested": {"shared": "global"}, "global_only": True},
+        updated_at=10,
+    )
     seed_document(
         api_client,
         app_key="corva.dysfunction_detection",
@@ -324,6 +353,7 @@ def test_get_settings_merges_package_company_and_asset_ancestry(
             "program_only": True,
             "rig_only": True,
         },
+        "global_only": True,
         "company_only": True,
         "program_only": True,
         "rig_only": True,
@@ -334,6 +364,15 @@ def test_get_settings_merges_package_company_and_asset_ancestry(
 def test_explain_settings_returns_effective_settings_and_layers(
     service: SettingsService, api_client: FakeApiClient
 ) -> None:
+    seed_document(
+        api_client,
+        app_key="corva.dysfunction_detection",
+        company_id=None,
+        asset_id=None,
+        settings={"nested": {"shared": "global"}, "global_only": True},
+        updated_at=10,
+        version=1,
+    )
     seed_document(
         api_client,
         app_key="corva.dysfunction_detection",
@@ -381,6 +420,7 @@ def test_explain_settings_returns_effective_settings_and_layers(
             "shared": "company",
             "rig_only": True,
         },
+        "global_only": True,
         "company_only": True,
         "rig_only": True,
         "asset_only": True,
@@ -393,6 +433,14 @@ def test_explain_settings_returns_effective_settings_and_layers(
                 "a": "package",
                 "nested": {"package_only": True, "shared": "package"},
             },
+        ),
+        SettingsExplainLayer(
+            source="dataset",
+            scope=SettingsScope(app_key="corva.dysfunction_detection"),
+            version=1,
+            timestamp=10,
+            deleted=False,
+            settings={"nested": {"shared": "global"}, "global_only": True},
         ),
         SettingsExplainLayer(
             source="dataset",
@@ -504,6 +552,66 @@ def test_patch_settings_creates_scope_document_and_merges_effective_value(
     assert asset_documents[0]["data"]["settings"]["nested"]["threshold"] == 25
 
 
+def test_replace_global_settings_appends_global_version_and_merges_defaults(
+    service: SettingsService, api_client: FakeApiClient
+) -> None:
+    seed_document(
+        api_client,
+        app_key="corva.dysfunction_detection",
+        company_id=None,
+        asset_id=None,
+        settings={"a": "old"},
+        updated_at=10,
+        updated_by="old@corva.ai",
+    )
+
+    settings = service.replace_global_settings(
+        "corva.dysfunction_detection",
+        {"a": "global", "global_only": True},
+        updated_by="new@corva.ai",
+    )
+
+    assert settings == {
+        "a": "global",
+        "nested": {"package_only": True, "shared": "package"},
+        "global_only": True,
+    }
+
+    global_documents = [
+        document for document in api_client.documents if document["scope_type"] == "global"
+    ]
+    assert [document["version"] for document in global_documents] == [1, 2]
+    assert global_documents[-1]["company_id"] is None
+    assert global_documents[-1]["asset_id"] is None
+    assert global_documents[-1]["data"]["settings"] == {"a": "global", "global_only": True}
+
+
+def test_patch_and_delete_global_settings_update_global_scope(
+    service: SettingsService, api_client: FakeApiClient
+) -> None:
+    service.replace_global_settings(
+        "corva.dysfunction_detection",
+        {"nested": {"threshold": 10}, "remove_me": True},
+        updated_by="user@corva.ai",
+    )
+
+    patched = service.patch_global_settings(
+        "corva.dysfunction_detection",
+        {"nested.threshold": 25, "new_flag": True},
+        updated_by="user@corva.ai",
+    )
+    deleted = service.delete_global_keys(
+        "corva.dysfunction_detection",
+        ["remove_me"],
+        updated_by="user@corva.ai",
+    )
+
+    assert patched["nested"]["threshold"] == 25
+    assert patched["new_flag"] is True
+    assert "remove_me" not in deleted
+    assert deleted["nested"]["threshold"] == 25
+
+
 def test_delete_keys_reverts_to_inherited_value(
     service: SettingsService, api_client: FakeApiClient
 ) -> None:
@@ -577,9 +685,34 @@ def test_replace_settings_rejects_unscoped_write(service: SettingsService) -> No
         )
 
 
+def test_list_scopes_includes_existing_global_scope(
+    service: SettingsService, api_client: FakeApiClient
+) -> None:
+    seed_document(
+        api_client,
+        app_key="corva.dysfunction_detection",
+        company_id=None,
+        asset_id=None,
+        settings={"global_only": True},
+        updated_at=10,
+    )
+
+    scopes = service.list_scopes("corva.dysfunction_detection")
+
+    assert scopes == [SettingsScope("corva.dysfunction_detection")]
+
+
 def test_list_scopes_returns_existing_resolution_chain(
     service: SettingsService, api_client: FakeApiClient
 ) -> None:
+    seed_document(
+        api_client,
+        app_key="corva.dysfunction_detection",
+        company_id=None,
+        asset_id=None,
+        settings={"global_only": True},
+        updated_at=5,
+    )
     seed_document(
         api_client,
         app_key="corva.dysfunction_detection",
@@ -608,6 +741,7 @@ def test_list_scopes_returns_existing_resolution_chain(
     scopes = service.list_scopes("corva.dysfunction_detection", asset_id=1)
 
     assert scopes == [
+        SettingsScope("corva.dysfunction_detection"),
         SettingsScope("corva.dysfunction_detection", company_id=3, asset_id=None),
         SettingsScope("corva.dysfunction_detection", company_id=3, asset_id=10),
         SettingsScope("corva.dysfunction_detection", company_id=3, asset_id=1),
@@ -698,6 +832,54 @@ def test_delete_scope_hides_deleted_scope_without_revealing_prior_version(
     ]
 
 
+def test_clear_global_settings_reverts_to_package_defaults(
+    service: SettingsService, api_client: FakeApiClient
+) -> None:
+    service.replace_global_settings(
+        "corva.dysfunction_detection",
+        {"a": "global", "global_only": True},
+        updated_by="user@corva.ai",
+    )
+
+    cleared = service.clear_global_settings(
+        "corva.dysfunction_detection",
+        updated_by="user@corva.ai",
+    )
+
+    assert cleared == {
+        "a": "package",
+        "nested": {"package_only": True, "shared": "package"},
+    }
+
+    latest_global_document = max(
+        (doc for doc in api_client.documents if doc["scope_type"] == "global"),
+        key=lambda item: item["timestamp"],
+    )
+    assert latest_global_document["data"]["settings"] == {}
+    assert latest_global_document["data"]["deleted"] is False
+
+
+def test_delete_global_scope_hides_deleted_scope_without_revealing_prior_version(
+    service: SettingsService,
+) -> None:
+    service.replace_global_settings(
+        "corva.dysfunction_detection",
+        {"a": "global", "global_only": True},
+        updated_by="user@corva.ai",
+    )
+
+    deleted = service.delete_global_scope(
+        "corva.dysfunction_detection",
+        updated_by="user@corva.ai",
+    )
+
+    assert deleted == {
+        "a": "package",
+        "nested": {"package_only": True, "shared": "package"},
+    }
+    assert service.list_scopes("corva.dysfunction_detection") == []
+
+
 def test_list_versions_returns_newest_first_with_versions(
     service: SettingsService, api_client: FakeApiClient
 ) -> None:
@@ -721,6 +903,34 @@ def test_list_versions_returns_newest_first_with_versions(
     )
 
     versions = service.list_versions("corva.dysfunction_detection", company_id=3)
+
+    assert [document.version for document in versions] == [2, 1]
+    assert [document.settings for document in versions] == [{"a": "v2"}, {"a": "v1"}]
+
+
+def test_list_global_versions_returns_newest_first_with_versions(
+    service: SettingsService, api_client: FakeApiClient
+) -> None:
+    seed_document(
+        api_client,
+        app_key="corva.dysfunction_detection",
+        company_id=None,
+        asset_id=None,
+        settings={"a": "v1"},
+        updated_at=10,
+        version=1,
+    )
+    seed_document(
+        api_client,
+        app_key="corva.dysfunction_detection",
+        company_id=None,
+        asset_id=None,
+        settings={"a": "v2"},
+        updated_at=20,
+        version=2,
+    )
+
+    versions = service.list_global_versions("corva.dysfunction_detection")
 
     assert [document.version for document in versions] == [2, 1]
     assert [document.settings for document in versions] == [{"a": "v2"}, {"a": "v1"}]
@@ -764,6 +974,44 @@ def test_rollback_settings_appends_new_latest_version_from_prior_version(
     assert latest_company_document["version"] == 3
     assert latest_company_document["data"]["settings"] == {"a": "v1"}
     assert latest_company_document["data"]["updated_by"] == "user@corva.ai"
+
+
+def test_rollback_global_settings_appends_new_latest_version_from_prior_version(
+    service: SettingsService, api_client: FakeApiClient
+) -> None:
+    seed_document(
+        api_client,
+        app_key="corva.dysfunction_detection",
+        company_id=None,
+        asset_id=None,
+        settings={"a": "v1"},
+        updated_at=10,
+        version=1,
+    )
+    seed_document(
+        api_client,
+        app_key="corva.dysfunction_detection",
+        company_id=None,
+        asset_id=None,
+        settings={"a": "v2"},
+        updated_at=20,
+        version=2,
+    )
+
+    settings = service.rollback_global_settings(
+        "corva.dysfunction_detection",
+        version=1,
+        updated_by="user@corva.ai",
+    )
+
+    assert settings["a"] == "v1"
+
+    latest_global_document = max(
+        (doc for doc in api_client.documents if doc["scope_type"] == "global"),
+        key=lambda item: item["version"],
+    )
+    assert latest_global_document["version"] == 3
+    assert latest_global_document["data"]["settings"] == {"a": "v1"}
 
 
 def test_rollback_settings_rejects_deleted_target_version(

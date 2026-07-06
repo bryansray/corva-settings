@@ -116,6 +116,25 @@ class SettingsService:
         self.repository.save_document(document)
         return self._resolve_effective_settings(app_key, context)
 
+    def replace_global_settings(
+        self,
+        app_key: str,
+        settings: Mapping[str, Any],
+        *,
+        updated_by: str,
+    ) -> dict[str, Any]:
+        """Replace app-level default settings by appending a new global scope version."""
+        scope = self._global_scope(app_key)
+        current = self.repository.fetch_latest_document(scope)
+        document = self._build_next_document(
+            scope,
+            dict(settings),
+            updated_by=updated_by,
+            previous=current,
+        )
+        self.repository.save_document(document)
+        return self._resolve_effective_settings(app_key, ScopeContext())
+
     def patch_settings(
         self,
         app_key: str,
@@ -139,6 +158,27 @@ class SettingsService:
         )
         self.repository.save_document(document)
         return self._resolve_effective_settings(app_key, context)
+
+    def patch_global_settings(
+        self,
+        app_key: str,
+        patch: Mapping[str, Any],
+        *,
+        updated_by: str,
+    ) -> dict[str, Any]:
+        """Apply a dotted-path patch to app-level default settings."""
+        scope = self._global_scope(app_key)
+        latest = self.repository.fetch_latest_document(scope)
+        current_settings = latest.settings if latest and not latest.deleted else {}
+        next_settings = apply_patch(current_settings, patch)
+        document = self._build_next_document(
+            scope,
+            next_settings,
+            updated_by=updated_by,
+            previous=latest,
+        )
+        self.repository.save_document(document)
+        return self._resolve_effective_settings(app_key, ScopeContext())
 
     def delete_keys(
         self,
@@ -169,6 +209,27 @@ class SettingsService:
         self.repository.save_document(document)
         return self._resolve_effective_settings(app_key, context)
 
+    def delete_global_keys(
+        self,
+        app_key: str,
+        paths: Sequence[str],
+        *,
+        updated_by: str,
+    ) -> dict[str, Any]:
+        """Delete dotted-path keys from app-level default settings."""
+        scope = self._global_scope(app_key)
+        latest = self.repository.fetch_latest_document(scope)
+        current_settings = latest.settings if latest and not latest.deleted else {}
+        next_settings = delete_paths(current_settings, paths)
+        document = self._build_next_document(
+            scope,
+            next_settings,
+            updated_by=updated_by,
+            previous=latest,
+        )
+        self.repository.save_document(document)
+        return self._resolve_effective_settings(app_key, ScopeContext())
+
     def clear_settings(
         self,
         app_key: str,
@@ -193,6 +254,24 @@ class SettingsService:
         )
         self.repository.save_document(document)
         return self._resolve_effective_settings(app_key, context)
+
+    def clear_global_settings(
+        self,
+        app_key: str,
+        *,
+        updated_by: str,
+    ) -> dict[str, Any]:
+        """Append an empty active global default version and return package defaults."""
+        scope = self._global_scope(app_key)
+        current = self.repository.fetch_latest_document(scope)
+        document = self._build_next_document(
+            scope,
+            {},
+            updated_by=updated_by,
+            previous=current,
+        )
+        self.repository.save_document(document)
+        return self._resolve_effective_settings(app_key, ScopeContext())
 
     def delete_scope(
         self,
@@ -222,6 +301,27 @@ class SettingsService:
         self.repository.save_document(document)
         return self._resolve_effective_settings(app_key, context)
 
+    def delete_global_scope(
+        self,
+        app_key: str,
+        *,
+        updated_by: str,
+    ) -> dict[str, Any]:
+        """Append a tombstone version for app-level default settings."""
+        scope = self._global_scope(app_key)
+        current = self.repository.fetch_latest_document(scope)
+        if current is None or current.deleted:
+            return self._resolve_effective_settings(app_key, ScopeContext())
+        document = self._build_next_document(
+            scope,
+            {},
+            updated_by=updated_by,
+            previous=current,
+            deleted=True,
+        )
+        self.repository.save_document(document)
+        return self._resolve_effective_settings(app_key, ScopeContext())
+
     def list_versions(
         self,
         app_key: str,
@@ -239,6 +339,20 @@ class SettingsService:
         context = self._resolve_context(company_id=company_id, asset_id=asset_id)
         scope = self._scope_for_write(app_key, context, company_id=company_id, asset_id=asset_id)
         return self.repository.list_documents(scope, limit=limit, include_deleted=include_deleted)
+
+    def list_global_versions(
+        self,
+        app_key: str,
+        *,
+        limit: int = 100,
+        include_deleted: bool = True,
+    ) -> list[SettingsDocument]:
+        """List stored global default versions for one app, newest first."""
+        return self.repository.list_documents(
+            self._global_scope(app_key),
+            limit=limit,
+            include_deleted=include_deleted,
+        )
 
     def rollback_settings(
         self,
@@ -271,6 +385,30 @@ class SettingsService:
         )
         self.repository.save_document(document)
         return self._resolve_effective_settings(app_key, context)
+
+    def rollback_global_settings(
+        self,
+        app_key: str,
+        *,
+        version: int,
+        updated_by: str,
+    ) -> dict[str, Any]:
+        """Append a new global default version by copying settings from an earlier version."""
+        scope = self._global_scope(app_key)
+        target = self.repository.fetch_document_version(scope, version)
+        if target is None:
+            raise ValueError(f"settings version {version} was not found for the global scope")
+        if target.deleted:
+            raise ValueError(f"settings version {version} is a tombstone and cannot be rolled back")
+        latest = self.repository.fetch_latest_document(scope)
+        document = self._build_next_document(
+            scope,
+            target.settings,
+            updated_by=updated_by,
+            previous=latest,
+        )
+        self.repository.save_document(document)
+        return self._resolve_effective_settings(app_key, ScopeContext())
 
     def list_scopes(
         self,
@@ -358,9 +496,13 @@ class SettingsService:
             return SettingsScope(app_key=app_key, company_id=context.company_id, asset_id=None)
         raise ValueError("settings writes must target a company or asset scope")
 
+    def _global_scope(self, app_key: str) -> SettingsScope:
+        """Build the concrete persisted scope for app-level default settings."""
+        return SettingsScope(app_key=app_key)
+
     def _resolution_chain(self, app_key: str, context: ScopeContext) -> list[SettingsScope]:
         """Build the ordered list of persisted scopes used during read resolution."""
-        chain: list[SettingsScope] = []
+        chain: list[SettingsScope] = [self._global_scope(app_key)]
         if context.company_id is not None:
             chain.append(
                 SettingsScope(app_key=app_key, company_id=context.company_id, asset_id=None)

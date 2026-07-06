@@ -25,17 +25,20 @@ Core modules:
 
 Persisted scopes are:
 
-- company scope: `company_id=<id>, asset_id=None`
-- asset scope: `company_id=<id>, asset_id=<id>`
+- global app scope: `scope_type=global, company_id=None, asset_id=None`
+- company scope: `scope_type=company, company_id=<id>, asset_id=None`
+- asset scope: `scope_type=asset, company_id=<id>, asset_id=<id>`
 
-Unscoped dataset queries are invalid and must not be issued. Package defaults are the only global layer.
+Global app defaults are stored explicitly with `scope_type=global`. Do not query by
+`app_key` alone when looking up global defaults.
 
 Read resolution order:
 
 1. Package defaults from `SettingsService(..., package_defaults=...)`
-2. Company-scoped dataset document, when available
-3. Ancestor asset-scoped documents from highest parent to lowest parent
-4. Requested asset-scoped document
+2. Global app-scoped dataset document, when available
+3. Company-scoped dataset document, when available
+4. Ancestor asset-scoped documents from highest parent to lowest parent
+5. Requested asset-scoped document
 
 Asset reads resolve ancestry by following `parent_asset_id` via `/v2/assets/{asset_id}`.
 
@@ -52,34 +55,43 @@ Embedded history inside one document is not used. Version history lives in the d
 The dataset must support multiple documents for the same:
 
 - `app_key`
+- `scope_type`
 - `company_id`
 - `asset_id`
 
 Recommended index strategy:
 
-- required unique index on `app_key + company_id + asset_id + version`
-- optional read-optimized index on `app_key + company_id + asset_id + version desc`
+- required unique index on `app_key + scope_type + company_id + asset_id + version`
+- optional read-optimized index on `app_key + scope_type + company_id + asset_id + version desc`
 
 ## Write Model
 
 Supported write operations:
 
 - `replace_settings`
+- `replace_global_settings`
 - `patch_settings`
+- `patch_global_settings`
 - `delete_keys`
+- `delete_global_keys`
 - `clear_settings`
+- `clear_global_settings`
 - `delete_scope`
+- `delete_global_scope`
 - `rollback_settings`
+- `rollback_global_settings`
 
 Supported read and inspection operations:
 
 - `get_settings`
 - `list_scopes`
 - `list_versions`
+- `list_global_versions`
 
 Behavior:
 
-- Writes must target either a company scope or an asset scope.
+- Global writes must use explicit `*_global_*` methods.
+- Company and asset writes must target either a company scope or an asset scope.
 - Same-scope writes append a new versioned document.
 - `clear_settings` writes an empty active document for the target scope.
 - `delete_scope` is a logical delete, not a physical delete. It writes a tombstone document with `data.deleted=True`.
@@ -90,7 +102,7 @@ Behavior:
 
 Stored documents include:
 
-- top-level: `_id`, `app_key`, `company_id`, `asset_id`, `version`, `timestamp`
+- top-level: `_id`, `app_key`, `scope_type`, `company_id`, `asset_id`, `version`, `timestamp`
 - `data.settings`
 - `data.updated_by`
 - `data.updated_at`
@@ -135,7 +147,7 @@ These are repo-specific collaboration rules and should be followed on future tas
 - After a commit, recommend the best next step or next feature based on the current state of the repo.
 - Keep commits scoped and intentional. Avoid bundling unrelated editor or local-environment changes unless explicitly requested.
 - When a change naturally breaks into separable units, group the work into multiple commits so review and history stay clear.
-- Do not reintroduce global persisted defaults through `company_id=None, asset_id=None` queries or writes.
+- Do not query global defaults by `app_key` alone. Use `scope_type=global, company_id=None, asset_id=None`.
 
 ## Practical Guidance For Future Changes
 

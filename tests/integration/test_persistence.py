@@ -81,22 +81,29 @@ def _test_provider() -> str:
     return os.getenv("CORVA_SETTINGS_TEST_PROVIDER", "corva")
 
 
+def _scope_type(company_id: int | None, asset_id: int | None) -> str:
+    if asset_id is not None:
+        return "asset"
+    if company_id is not None:
+        return "company"
+    return "global"
+
+
 def _fetch_latest_scope_document(
     api: Api,
     *,
     provider: str,
     dataset: str,
     app_key: str,
-    company_id: int,
+    company_id: int | None,
     asset_id: int | None = None,
 ) -> dict[str, Any]:
-    scope_type = "asset" if asset_id is not None else "company"
     results = api.get_dataset(
         provider,
         dataset,
         query={
             "app_key": app_key,
-            "scope_type": scope_type,
+            "scope_type": _scope_type(company_id, asset_id),
             "company_id": company_id,
             "asset_id": asset_id,
         },
@@ -116,17 +123,16 @@ def _fetch_scope_documents(
     provider: str,
     dataset: str,
     app_key: str,
-    company_id: int,
+    company_id: int | None,
     asset_id: int | None = None,
     limit: int = 10,
 ) -> list[dict[str, Any]]:
-    scope_type = "asset" if asset_id is not None else "company"
     results = api.get_dataset(
         provider,
         dataset,
         query={
             "app_key": app_key,
-            "scope_type": scope_type,
+            "scope_type": _scope_type(company_id, asset_id),
             "company_id": company_id,
             "asset_id": asset_id,
         },
@@ -136,6 +142,59 @@ def _fetch_scope_documents(
     )
     assert all(isinstance(document, dict) for document in results)
     return [cast(dict[str, Any], document) for document in results]
+
+
+def test_replace_global_settings_persists_app_default_document_to_dataset() -> None:
+    api = _build_api()
+    provider = _test_provider()
+    dataset = _test_dataset()
+    unique_app_key = f"corva-settings.integration.{uuid4()}"
+    updated_by = "corva-settings-integration-test"
+    run_id = str(uuid4())
+    now = int(time())
+
+    service = SettingsService(
+        cast(SettingsApiClientProtocol, api),
+        provider=provider,
+        dataset=dataset,
+        package_defaults={unique_app_key: {"package_default": True}},
+        clock=lambda: now,
+    )
+
+    expected_settings = {
+        "integration_run_id": run_id,
+        "global_default": True,
+    }
+
+    resolved = service.replace_global_settings(
+        unique_app_key,
+        expected_settings,
+        updated_by=updated_by,
+    )
+
+    assert resolved == {
+        "package_default": True,
+        "integration_run_id": run_id,
+        "global_default": True,
+    }
+
+    document = _fetch_latest_scope_document(
+        api,
+        provider=provider,
+        dataset=dataset,
+        app_key=unique_app_key,
+        company_id=None,
+    )
+    assert document["app_key"] == unique_app_key
+    assert document["scope_type"] == "global"
+    assert document["company_id"] is None
+    assert document["asset_id"] is None
+    assert document["timestamp"] == now
+    assert document["version"] == 1
+    assert document["data"]["settings"] == expected_settings
+    assert document["data"]["updated_by"] == updated_by
+    assert document["data"]["updated_at"] == now
+    assert document["data"]["deleted"] is False
 
 
 def test_replace_settings_persists_company_scoped_document_to_dataset() -> None:

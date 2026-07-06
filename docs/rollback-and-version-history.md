@@ -16,11 +16,17 @@ A scope is identified by:
 Examples of writes that create a new version:
 
 - `replace_settings(...)`
+- `replace_global_settings(...)`
 - `patch_settings(...)`
+- `patch_global_settings(...)`
 - `delete_keys(...)`
+- `delete_global_keys(...)`
 - `clear_settings(...)`
+- `clear_global_settings(...)`
 - `delete_scope(...)`
+- `delete_global_scope(...)`
 - `rollback_settings(...)`
+- `rollback_global_settings(...)`
 
 The live state for a scope is the newest non-deleted document selected by:
 

@@ -2,19 +2,19 @@
 
 This document explains how settings are resolved across company and asset scopes.
 
-Persisted documents include an explicit `scope_type` field. Company documents use
-`scope_type="company"` and asset documents use `scope_type="asset"`. The storage
-model also reserves `scope_type="global"` for app-level defaults, but that layer is
-not part of the public resolution API yet.
+Persisted documents include an explicit `scope_type` field. Global app default
+documents use `scope_type="global"`, company documents use `scope_type="company"`,
+and asset documents use `scope_type="asset"`.
 
 ## Resolution Order
 
 When you request settings for a scope, the service merges settings in this order:
 
 1. Package defaults
-2. Company scope
-3. Ancestor asset scopes, from highest parent down to the requested asset
-4. Requested asset scope
+2. Global app scope
+3. Company scope
+4. Ancestor asset scopes, from highest parent down to the requested asset
+5. Requested asset scope
 
 Later layers override earlier layers.
 
@@ -41,7 +41,7 @@ flowchart TD
 If you request settings for `Well 1`, the service resolves this chain:
 
 ```text
-Package defaults -> Company 1 -> Rig 1 -> Well 1
+Package defaults -> Global app defaults -> Company 1 -> Rig 1 -> Well 1
 ```
 
 These scopes are not used for `Well 1`:
