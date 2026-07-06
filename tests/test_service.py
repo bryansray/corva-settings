@@ -197,8 +197,7 @@ def test_settings_scope_derives_scope_type() -> None:
     assert SettingsScope("corva.dysfunction_detection").scope_type == "global"
     assert SettingsScope("corva.dysfunction_detection", company_id=3).scope_type == "company"
     assert (
-        SettingsScope("corva.dysfunction_detection", company_id=3, asset_id=1).scope_type
-        == "asset"
+        SettingsScope("corva.dysfunction_detection", company_id=3, asset_id=1).scope_type == "asset"
     )
 
 
